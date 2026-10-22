@@ -14,7 +14,7 @@ from __future__ import annotations
 import datetime as dt
 import time
 
-from . import checks, extract, llm, matching, policy, reply, tools
+from . import checks, crosscheck, extract, llm, matching, policy, reply, tools
 from .schemas import CaseRecord, Complaint, Decision
 
 STATUS_BY_ROUTE = {"AUTO_RESOLVE": "RESOLVED","HUMAN_APPROVAL": "PENDING_APPROVAL", "FRAUD_TEAM": "FRAUD_QUEUE"}
@@ -36,7 +36,7 @@ def process_complaint(c: dict, oracle_category: str | None = None) -> CaseRecord
 
     ex = step("understand", lambda: extract.extract(c, usage))
     if oracle_category:
-        ex.category, ex.intent = oracle_category, "COMPLAINT"
+        ex.category, ex.intent, ex.crosscheck = oracle_category, "COMPLAINT", {}
     trace[-1]["detail"] = ex.to_dict()
     lang = extract.reply_language(c, ex.language)
     follow_ups = int(c.get("follow_ups") or 0)
@@ -59,6 +59,9 @@ def process_complaint(c: dict, oracle_category: str | None = None) -> CaseRecord
                                "flags": match.flags}
         if ex.intent == "NEEDS_DETAILS":           # fraud category, or follow-ups used up: never stall the case
             match.flags.append("DETAILS_STILL_MISSING" if follow_ups >= MAX_FOLLOW_UPS else "VAGUE_FRAUD_REPORT")
+        if crosscheck.needs_officer(ex):           # LLM and rules disagreed and the second look didn't settle it
+            match.flags.append(crosscheck.OFFICER_FLAG)
+            match.reasons.append(crosscheck.officer_reason(ex))
         decision = step("decide", lambda: policy.decide(c, ex.category, match))
         trace[-1]["detail"] = {"outcome": decision.outcome, "refund": decision.refund_amount_myr,
                                "reasons": decision.reasons}
@@ -66,15 +69,29 @@ def process_complaint(c: dict, oracle_category: str | None = None) -> CaseRecord
         template = lambda: reply.draft_template(c, decision, lang)                 # noqa: E731
         status = None                                                              # set from the route below
 
-    text = step("draft_reply", draft)
+    def attempt(name, feedback=""):
+        """Draft once; record whether the LLM wrote it or the template stood in (an LLM failure falls back)."""
+        before = len(usage.failures)
+        out = step(name, lambda: draft(feedback))
+        source = "llm" if llm.enabled() and len(usage.failures) == before else "template"
+        trace[-1]["detail"] = {"source": source}
+        return out, source
+
+    rejected = []                                  # drafts the self-check turned down, kept for the audit
+    text, source = attempt("draft_reply")
     problems = step("check", lambda: checks.check(c, decision, text, lang))
     if problems:                                   # redraft once with the problems as feedback, then the template
-        text = step("redraft", lambda: draft("; ".join(problems)))
+        rejected.append({"source": source, "text": text, "problems": problems})
+        text, source = attempt("redraft", "; ".join(problems))
         problems = step("recheck", lambda: checks.check(c, decision, text, lang))
         if problems:
-            text = template()
+            rejected.append({"source": source, "text": text, "problems": problems})
+            text, source = template(), "template"
             problems = checks.check(c, decision, text, lang)
     trace[-1]["detail"] = {"problems": problems}
+    decision.evidence["reply"] = {"source": source, "language": lang,
+                                  "language_why": extract.reply_language_why(c, ex.language),
+                                  "rejected_drafts": rejected}
 
     if problems:                                   # a reply that fails the check never goes out on its own
         decision.flags.append("CHECK_FAILED")
@@ -97,13 +114,15 @@ def process_complaint(c: dict, oracle_category: str | None = None) -> CaseRecord
 def _no_action(c: dict, category: str, reason: str) -> Decision:
     """A message we answer without touching money: no transaction, no refund, auto-sent reply."""
     return Decision(matched_txn_id="", outcome="INFO_ONLY", refund_amount_myr=0.0,
-                    priority=policy.priority(c, category), route="AUTO_RESOLVE", reasons=[reason])
+                    priority=policy.priority(c, category), route="AUTO_RESOLVE", reasons=[reason],
+                    evidence=policy.context(c, category))
 
 
 def _undecided(c: dict, category: str, reason: str) -> Decision:
     """A case still gathering facts: no transaction, outcome or route yet. Priority is known, so the SLA clock runs."""
     return Decision(matched_txn_id="", outcome="", refund_amount_myr=0.0,
-                    priority=policy.priority(c, category), route="", reasons=[reason])
+                    priority=policy.priority(c, category), route="", reasons=[reason],
+                    evidence=policy.context(c, category))
 
 
 def follow_up_complaint(original: dict, reply_text: str) -> dict:

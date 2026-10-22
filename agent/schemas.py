@@ -11,6 +11,14 @@ from typing import Optional
 
 CATEGORIES = ["DUPLICATE_CHARGE", "FAILED_TRANSFER", "ATM_NOT_DISPENSED", "UNAUTHORISED_CARD",
               "SCAM_TRANSFER", "FEE_DISPUTE", "SERVICE_QUALITY"]
+CATEGORY_GUIDE = """\
+- DUPLICATE_CHARGE: a card purchase charged more than once
+- FAILED_TRANSFER: a DuitNow/IBG transfer failed or didn't arrive but money left the account
+- ATM_NOT_DISPENSED: an ATM gave less cash than requested
+- UNAUTHORISED_CARD: the customer says they did not make a card transaction
+- SCAM_TRANSFER: the customer was tricked into sending money themselves (fake police, job, parcel, investment, romance)
+- FEE_DISPUTE: the customer disputes a bank fee
+- SERVICE_QUALITY: branch, app, hotline or staff complaints with no money in dispute"""   # used in the LLM prompts
 OUTCOMES = ["REFUND", "DECLINE", "INVESTIGATE", "INFO_ONLY"]
 ROUTES = ["AUTO_RESOLVE", "HUMAN_APPROVAL", "FRAUD_TEAM"]
 
@@ -62,6 +70,7 @@ class Extraction:
     confidence: str = ""                # high | medium | low (LLM only; recorded for monitoring, not routing)
     missing_info: list = field(default_factory=list)   # NEEDS_DETAILS: what to ask for, e.g. ["date", "amount"]
     source: str = "rules"               # rules | llm | "rules (llm failed: <kind>)"
+    crosscheck: dict = field(default_factory=dict)     # LLM vs code: category (and how it was settled), language, hedges
 
     def to_dict(self):
         return asdict(self)

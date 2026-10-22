@@ -11,6 +11,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from agent.summary import case_summary
 from app import store
 from app.worker import submit, submit_reply
 
@@ -62,21 +63,25 @@ def customer_reply(complaint_id: str, body: CustomerReplyIn):
 
 @app.get("/cases")
 def cases(status: Optional[str] = None, limit: int = 200):
-    return store.list_cases(status, limit)
+    """`status` may list several, comma-separated: ?status=RESOLVED,ANSWERED"""
+    return store.list_cases(status.split(",") if status else None, limit)
 
 
 @app.get("/cases/{complaint_id}")
 def case(complaint_id: str):
+    """The full case, plus `summary`: the at-a-glance view the dashboard shows first (agent/summary.py)."""
     c = store.get_case(complaint_id)
     if not c:
         raise HTTPException(404, "not processed yet (is the worker running?)")
-    return c
+    return {**c, "summary": case_summary(c["record"], c["status"])}
 
 
 @app.post("/cases/{complaint_id}/approve")
 def approve(complaint_id: str, body: ApprovalIn):
     try:
         store.approve(complaint_id, body.officer, body.reply_text)
+    except store.ReplyCheckFailed as e:          # nothing sent: the officer must fix the reply
+        raise HTTPException(422, {"error": "reply failed the self-check", "problems": e.problems})
     except ValueError as e:
         raise HTTPException(409, str(e))
     return store.get_case(complaint_id)
@@ -84,7 +89,25 @@ def approve(complaint_id: str, body: ApprovalIn):
 
 @app.post("/cases/{complaint_id}/reject")
 def reject(complaint_id: str, body: ApprovalIn):
-    store.reject(complaint_id, body.officer, body.note)
+    try:
+        store.reject(complaint_id, body.officer, body.note)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+    return store.get_case(complaint_id)
+
+
+class FlagIn(BaseModel):
+    officer: str
+    note: str
+
+
+@app.post("/cases/{complaint_id}/flag")
+def flag(complaint_id: str, body: FlagIn):
+    """Question a case whose reply has already gone out (spot-check of automatic decisions). Audited; changes nothing."""
+    try:
+        store.flag_for_review(complaint_id, body.officer, body.note)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
     return store.get_case(complaint_id)
 
 

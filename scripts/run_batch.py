@@ -89,6 +89,11 @@ def main():
     print(f"flags: {dict(flags)}  routes: {dict(Counter(r.decision.route for r in records))}")
     print(f"intents: {dict(Counter(r.extraction.intent for r in records))}  "
           f"statuses: {dict(Counter(r.status for r in records))}")
+    xs = [r.extraction.crosscheck for r in records]
+    xc = Counter(x.get("resolution") or x.get("result") for x in xs if x.get("result"))
+    if xc:
+        print(f"crosscheck (LLM vs rules on category): {dict(xc)}  code overrode the LLM on: "
+              f"language {sum('language' in x for x in xs)}, approx amount {sum('amount_approx' in x for x in xs)}")
     failures = Counter(k for r in records for k in r.llm_usage.get("failures", []))
     if failures:
         print(f"LLM failures by kind (fell back to rules/templates): {dict(failures)}")
