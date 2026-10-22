@@ -3,6 +3,10 @@ __pycache__/
 .env
 .venv/
 venv/
+build/
+dist/
+wheels/
+*.egg-info/
 details.csv
 .DS_Store
 
