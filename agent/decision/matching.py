@@ -4,11 +4,13 @@ Approach: take the customer's debits in the 45-day window for the category's cha
 contradict a hard clue (amount, card), then score the rest on soft clues (date, name). Ties are flagged, not hidden.
 
 Done: approximate-amount tolerance tuned on training (20%); town words no longer count as a name match.
+Done (B): FEE_DISPUTE naming a month: the month identifies the charge; a quoted amount may be the expected fee
+("I thought the fee is only RM10", CMP-02357), so it no longer rules a charge out. If the month and the amount point
+to different charges, the match is flagged AMBIGUOUS_MATCH for an officer.
 
 TODO(A):
   - better name matching (partial, ATM location, biller)
-  - DUPLICATE_CHARGE: when several twin pairs exist, use the date/amount to pick the pair
-  - FEE_DISPUTE: "I thought the fee is only RM10" quotes the expected fee, not the charged one (CMP-02357)
+  - DUPLICATE_CHARGE: when several twin pairs exist, use the date/amount to pick the pair (CMP-01550)
 """
 from __future__ import annotations
 
@@ -76,15 +78,21 @@ def find_transaction(complaint: dict, ex: Extraction) -> Match:
     when = {"phrase": ex.date_phrase or "(none given: searched the message)", "from": str(dates.start),
             "to": str(dates.end), "rule": dates.rule}
 
+    # A fee complaint naming a month: that month's charge is the one disputed, and an amount quoted with it may be the
+    # fee the customer expected ("isn't it RM10?"), so the amount can't rule a charge out. Without a month, it still can.
+    fee_by_month = ex.category == "FEE_DISPUTE" and bool(ex.fee_month)
+
     scored = []
     for t in pool:
         s, why = 0.0, []
         if ex.amount is not None:
             diff = abs(t["amount"] - ex.amount)
             if diff < 0.005:
-                s += 5; why.append("exact amount")
+                s += 2 if fee_by_month else 5; why.append("exact amount")
             elif ex.amount_approx and diff <= ex.amount * APPROX_TOLERANCE:
                 s += 4 - diff / ex.amount; why.append("approx amount")
+            elif fee_by_month:
+                pass                                      # "isn't it RM10?" may be the fee they expected, not the charge
             else:
                 continue                                  # amount contradicts: not this one
         if ex.card_last4:
@@ -101,7 +109,7 @@ def find_transaction(complaint: dict, ex: Extraction) -> Match:
             if ex.fee_type and t["description"].startswith(FEE_PREFIX.get(ex.fee_type, "~")):
                 s += 3; why.append("fee type")
             if ex.fee_month and t["txn_time"][:7] == ex.fee_month:
-                s += 2; why.append("fee month")
+                s += 6; why.append("fee month")           # the month named identifies the charge disputed
         if ex.category == "DUPLICATE_CHARGE":
             if _has_twin(t, pool):
                 s += 4; why.append("has earlier twin")
@@ -121,4 +129,9 @@ def find_transaction(complaint: dict, ex: Extraction) -> Match:
     m = Match(best, candidates=candidates, dates=when, reasons=[f"Matched {best['txn_id']} on: {', '.join(why)}"])
     if len(scored) > 1 and int(scored[1][0]) == int(best_s):
         m.flags.append("AMBIGUOUS_MATCH")
+    elif fee_by_month and ex.amount is not None:
+        exact = [t["txn_id"] for _, t, _ in scored if abs(t["amount"] - ex.amount) < 0.005]
+        if exact and best["txn_id"] not in exact:     # the month and the amount point to different charges:
+            m.flags.append("AMBIGUOUS_MATCH")         # never decide silently, an officer confirms which one
+            m.reasons.append(f"The month named points to {best['txn_id']}, the amount quoted to {', '.join(exact)}")
     return m

@@ -94,6 +94,60 @@ class Matching(unittest.TestCase):
         self.assertTrue(matching._name_hit(_debit("T1", 50.0, "Melaka Station"), ex, "the atm did not dispense"))
 
 
+def _fee(txn_id, month, amount, desc="Monthly service charge"):
+    t = dt.datetime(2026, month, 28, 23, 30)
+    return {"txn_id": txn_id, "amount": amount, "merchant_or_counterparty": "Teratai Bank", "card_last4": "",
+            "time": t, "txn_time": t.strftime("%Y-%m-%d %H:%M:%S"), "description": f"{desc} {t:%b %Y}"}
+
+
+JUL, AUG, AUG_DEBIT = _fee("JUL-10", 7, 10.0), _fee("AUG-20", 8, 20.0), _fee("AUG-DEBIT-12", 8, 12.0, "Debit card annual fee")
+
+
+class FeeByMonth(unittest.TestCase):
+    """A fee complaint naming a month: the month identifies the charge; a quoted amount may be the fee the customer
+    expected ("isn't it RM10?", CMP-02357, CMP-00079). When month and amount point to different charges, an officer
+    decides. July's RM10 fee is correct; August's RM20 is the overcharge."""
+
+    def fee_match(self, debits=(JUL, AUG), **fields):
+        complaint = {"customer_id": "CUS-TEST", "received_at": "2026-09-10 10:00", "text": "fee complaint"}
+        with mock.patch.object(tools, "find_debits", return_value=list(debits)):
+            m = matching.find_transaction(complaint, Extraction(category="FEE_DISPUTE", language="EN", **fields))
+        return (m.txn or {}).get("txn_id"), m.flags
+
+    def test_expected_fee_quoted_with_a_month(self):            # "monthly service charge in August? Isn't it RM10?"
+        self.assertEqual(self.fee_match(amount=10.0, fee_month="2026-08"), ("AUG-20", ["AMBIGUOUS_MATCH"]))
+
+    def test_month_and_amount_agree(self):                      # "charged RM20 in August"
+        self.assertEqual(self.fee_match(amount=20.0, fee_month="2026-08"), ("AUG-20", []))
+
+    def test_month_and_amount_point_to_different_charges(self):  # "RM20 in July", but RM20 was August's
+        self.assertEqual(self.fee_match(amount=20.0, fee_month="2026-07")[1], ["AMBIGUOUS_MATCH"])
+
+    def test_month_without_a_fee_falls_back_to_the_amount(self):  # "RM20 in September": no September fee
+        self.assertEqual(self.fee_match(amount=20.0, fee_month="2026-09"), ("AUG-20", []))
+
+    def test_no_month_and_no_amount_match_is_still_no_match(self):  # "RM15 fee": the amount still rules charges out
+        self.assertEqual(self.fee_match(amount=15.0), (None, ["NO_MATCH"]))
+
+    def test_no_month_exact_amount(self):                       # "RM20 fee"
+        self.assertEqual(self.fee_match(amount=20.0), ("AUG-20", []))
+
+    def test_two_fees_in_the_month(self):
+        self.assertEqual(self.fee_match((JUL, AUG, AUG_DEBIT), amount=10.0, fee_month="2026-08",
+                                        fee_type="MONTHLY_SERVICE"), ("AUG-20", ["AMBIGUOUS_MATCH"]))
+        self.assertEqual(self.fee_match((JUL, AUG, AUG_DEBIT), amount=10.0, fee_month="2026-08")[1],
+                         ["AMBIGUOUS_MATCH"])
+
+    def test_hedged_amount_with_a_month(self):                  # "about RM20 in August"
+        self.assertEqual(self.fee_match(amount=20.0, amount_approx=True, fee_month="2026-08"), ("AUG-20", []))
+
+    def test_other_categories_still_rule_out_by_amount(self):
+        complaint = {"customer_id": "CUS-TEST", "received_at": "2026-09-10 10:00", "text": "atm"}
+        ex = Extraction(category="ATM_NOT_DISPENSED", language="EN", amount=15.0)
+        with mock.patch.object(tools, "find_debits", return_value=[_debit("T1", 20.0)]):
+            self.assertEqual(matching.find_transaction(complaint, ex).flags, ["NO_MATCH"])
+
+
 class OldImportPaths(unittest.TestCase):
     """B's and C's code still imports agent.tools, agent.matching, agent.policy, agent.dates."""
 
