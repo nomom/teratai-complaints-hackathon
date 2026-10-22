@@ -87,6 +87,11 @@ def main():
           f"tokens in/out {toks['input_tokens']}/{toks['output_tokens']}")
     flags = Counter(f for r in records for f in r.decision.flags)
     print(f"flags: {dict(flags)}  routes: {dict(Counter(r.decision.route for r in records))}")
+    print(f"intents: {dict(Counter(r.extraction.intent for r in records))}  "
+          f"statuses: {dict(Counter(r.status for r in records))}")
+    failures = Counter(k for r in records for k in r.llm_usage.get("failures", []))
+    if failures:
+        print(f"LLM failures by kind (fell back to rules/templates): {dict(failures)}")
 
     scored = [r for r in records if r.complaint.complaint_id in labels]
     if scored:

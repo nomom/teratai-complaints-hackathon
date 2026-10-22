@@ -1,11 +1,14 @@
-"""Owner: C. Case store (SQLite): cases, the two queues, and an audit log of every action.
+"""Owner: C. Case store (SQLite): cases, the queues, and an audit log of every action and message.
 
 Nothing in PENDING_APPROVAL or FRAUD_QUEUE is ever sent until a person acts on it here.
+A case awaiting the customer has no decision yet: its matched_txn_id, outcome, refund and route are NULL.
+The audit log doubles as the message thread: question_sent, customer_replied and reply_sent carry the text.
 """
 import datetime as dt
 import json
 import os
 import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -28,12 +31,18 @@ def _now():
     return dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
+@contextmanager
 def connect():
+    """One transaction: commit on success, roll back on error, and always close (sqlite3's own `with` doesn't)."""
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(DB_PATH, timeout=30)
     con.row_factory = sqlite3.Row
-    con.executescript(SCHEMA)
-    return con
+    try:
+        con.executescript(SCHEMA)
+        with con:
+            yield con
+    finally:
+        con.close()
 
 
 def audit(con, complaint_id, actor, action, detail=""):
@@ -42,16 +51,29 @@ def audit(con, complaint_id, actor, action, detail=""):
 
 
 def save_case(rec):
+    """Insert a new case, or update one that was reopened by a customer reply (created_at is kept)."""
     c, d = rec.complaint, rec.decision
+    decided = d.decided
     with connect() as con:
+        old = con.execute("SELECT created_at FROM cases WHERE complaint_id = ?", (c.complaint_id,)).fetchone()
         con.execute("INSERT OR REPLACE INTO cases VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (
-            c.complaint_id, c.customer_id, c.received_at, c.channel, c.text, rec.category, d.matched_txn_id,
-            d.outcome, d.refund_amount_myr, d.priority, rec.reply_language, d.route, rec.status, rec.reply_text,
-            int(not rec.check_problems), json.dumps(d.flags), rec.sla_due, json.dumps(rec.to_dict(), default=str),
-            _now(), _now()))
-        audit(con, c.complaint_id, "agent", "processed", {"route": d.route, "status": rec.status, "flags": d.flags})
-        if rec.status == "SENT":
-            audit(con, c.complaint_id, "agent", "reply_sent", "auto-resolved")
+            c.complaint_id, c.customer_id, c.received_at, c.channel, c.text, rec.category,
+            d.matched_txn_id if decided else None, d.outcome if decided else None,
+            d.refund_amount_myr if decided else None, d.priority, rec.reply_language, d.route or None, rec.status,
+            rec.reply_text, int(not rec.check_problems), json.dumps(d.flags), rec.sla_due,
+            json.dumps(rec.to_dict(), default=str), old["created_at"] if old else _now(), _now()))
+        audit(con, c.complaint_id, "agent", "decided" if decided else "processed",
+              {"intent": rec.extraction.intent, "outcome": d.outcome or None, "route": d.route or None,
+               "status": rec.status, "flags": d.flags})
+        if rec.status == "AWAITING_CUSTOMER":
+            audit(con, c.complaint_id, "agent", "question_sent", rec.reply_text)
+        elif rec.status in ("RESOLVED", "ANSWERED"):
+            audit(con, c.complaint_id, "agent", "reply_sent", rec.reply_text)
+
+
+def log(complaint_id, actor, action, detail=""):
+    with connect() as con:
+        audit(con, complaint_id, actor, action, detail)
 
 
 def list_cases(status=None, limit=200):
@@ -73,17 +95,23 @@ def get_case(complaint_id):
 
 
 def approve(complaint_id, officer, reply_text=None):
-    """Officer approves (optionally edits) the reply; only now does it count as sent."""
+    """Officer approves (optionally edits) the reply; only now does it count as sent.
+
+    An undecided case lands here only when its follow-up question failed the self-check. Once the officer approves
+    the question, the case waits for the customer instead of closing.
+    """
     with connect() as con:
-        row = con.execute("SELECT status, reply_text FROM cases WHERE complaint_id = ?", (complaint_id,)).fetchone()
+        row = con.execute("SELECT status, outcome, reply_text FROM cases WHERE complaint_id = ?",
+                          (complaint_id,)).fetchone()
         if not row or row["status"] not in ("PENDING_APPROVAL", "FRAUD_QUEUE"):
             raise ValueError(f"{complaint_id} is not waiting for approval")
         text = reply_text or row["reply_text"]
+        decided = bool(row["outcome"])
         # TODO(C): re-run agent.checks.check on an edited reply before sending
-        con.execute("UPDATE cases SET status='APPROVED', reply_text=?, updated_at=? WHERE complaint_id=?",
-                    (text, _now(), complaint_id))
+        con.execute("UPDATE cases SET status=?, reply_text=?, updated_at=? WHERE complaint_id=?",
+                    ("APPROVED" if decided else "AWAITING_CUSTOMER", text, _now(), complaint_id))
         audit(con, complaint_id, officer, "approved", "edited" if reply_text else "as drafted")
-        audit(con, complaint_id, officer, "reply_sent", "")
+        audit(con, complaint_id, officer, "reply_sent" if decided else "question_sent", text)
 
 
 def reject(complaint_id, officer, note=""):

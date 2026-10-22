@@ -14,7 +14,9 @@ import re
 
 from . import llm, tools
 from .dates import month_of
-from .schemas import CATEGORIES, Extraction
+from .schemas import CATEGORIES, CONFIDENCE, INTENTS, Extraction
+
+MISSING_INFO = ["what_happened", "transaction_type", "date", "amount", "merchant_or_recipient", "card_last4"]
 
 KEYWORDS = [  # checked in order (from starter/baseline.py)
     ("SCAM_TRANSFER", ["scam", "tipu", "police", "polis", "safe account", "akaun selamat", "parcel", "bungkusan", "invest",
@@ -91,14 +93,31 @@ SCHEMA = {
         "card_last4": {"type": "string"},
         "fee_type": {"type": "string", "enum": ["", "MONTHLY_SERVICE", "DEBIT_ANNUAL", "CC_ANNUAL"]},
         "fee_month_phrase": {"type": "string"},
+        "intent": {"type": "string", "enum": INTENTS},
+        "confidence": {"type": "string", "enum": CONFIDENCE},
+        "missing_info": {"type": "array", "items": {"type": "string", "enum": MISSING_INFO}},
     },
-    "required": ["category", "language", "amount", "amount_approx", "counterparty", "date_phrase", "card_last4",
-                 "fee_type", "fee_month_phrase"],
+    "required": ["intent", "category", "language", "confidence", "missing_info", "amount", "amount_approx",
+                 "counterparty", "date_phrase", "card_last4", "fee_type", "fee_month_phrase"],
     "additionalProperties": False,
 }
 
-SYSTEM = """You read customer complaints sent to a Malaysian bank (English, Malay or a mix) and extract structured fields.
+SYSTEM = """You read messages sent to a Malaysian bank's complaints channel (English, Malay or a mix) and extract structured fields.
 Do not decide refunds. Copy clues as the customer wrote them; leave a field empty ("" or null) when it isn't stated.
+A message may contain the original complaint followed by "[Customer follow-up]" replies: read them together as one case.
+
+intent (decide this first):
+- COMPLAINT: the customer describes a specific problem, even if some details (amount, date) are missing.
+  "I was charged twice at GoRide" is a COMPLAINT. Anything that could be fraud or a scam is ALWAYS a COMPLAINT.
+- NEEDS_DETAILS: a complaint, greeting or request for help so general that you cannot tell what went wrong,
+  e.g. "my account has a problem", "I want to complain", "hi, need help". List what to ask for in missing_info.
+- OUT_OF_SCOPE: not a banking complaint at all: weather, chit-chat, general knowledge, questions about bank
+  products or rates, requests for advice.
+Still fill category with the closest match for every intent (SERVICE_QUALITY when nothing fits).
+
+confidence: how sure you are of intent and category: high, medium or low.
+missing_info: for NEEDS_DETAILS only (else []): what the customer should tell us. Use: what_happened, transaction_type,
+date, amount, merchant_or_recipient, card_last4.
 
 Categories:
 - DUPLICATE_CHARGE: a card purchase charged more than once
@@ -124,16 +143,24 @@ def extract_llm(complaint: dict, usage: llm.Usage | None = None) -> Extraction:
     return Extraction(
         category=d["category"], language=d["language"], amount=d["amount"], amount_approx=d["amount_approx"],
         counterparty=d["counterparty"], date_phrase=d["date_phrase"], card_last4=d["card_last4"][-4:],
-        fee_type=d["fee_type"], fee_month=month_of(d["fee_month_phrase"], recv), source="llm",
+        fee_type=d["fee_type"], fee_month=month_of(d["fee_month_phrase"], recv),
+        intent=d["intent"], confidence=d["confidence"],
+        missing_info=d["missing_info"] if d["intent"] == "NEEDS_DETAILS" else [], source="llm",
     )
 
 
 def extract(complaint: dict, usage: llm.Usage | None = None) -> Extraction:
+    """The rules path always returns intent COMPLAINT: only the LLM can tell a vague or off-topic message apart."""
     if llm.enabled():
         try:
             return extract_llm(complaint, usage)
-        except Exception as e:  # noqa: BLE001 -- never lose a complaint over an LLM error
-            ex = extract_rules(complaint)
-            ex.source = f"rules (llm failed: {type(e).__name__})"
-            return ex
+        except llm.LLMError as e:          # never lose a complaint over an LLM error
+            reason = e.kind
+        except Exception as e:  # noqa: BLE001 -- e.g. a bug in parsing; still fall back, but say so
+            reason = f"unexpected {type(e).__name__}"
+            if usage is not None:
+                usage.failures.append("unexpected")
+        ex = extract_rules(complaint)
+        ex.source = f"rules (llm failed: {reason})"
+        return ex
     return extract_rules(complaint)

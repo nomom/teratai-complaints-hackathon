@@ -31,15 +31,32 @@ def submit(complaint: dict) -> str:
     return c["complaint_id"]
 
 
+def submit_reply(case_id: str, text: str) -> str:
+    """Drop a customer's answer to a follow-up question into the inbox; the worker reprocesses the case."""
+    msg_id = f"REPLY-{case_id}-{uuid.uuid4().hex[:6].upper()}"
+    INBOX.mkdir(exist_ok=True)
+    tmp = INBOX / f".{msg_id}.tmp"
+    tmp.write_text(json.dumps({"in_reply_to": case_id, "text": text}, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(INBOX / f"{msg_id}.json")
+    return msg_id
+
+
 def handle(path: Path):
-    from agent.pipeline import process_complaint
+    from agent.pipeline import follow_up_complaint, process_complaint
     from app import store
 
     c = json.loads(path.read_text(encoding="utf-8"))
+    if c.get("in_reply_to"):
+        case = store.get_case(c["in_reply_to"])
+        if not case or case["status"] != "AWAITING_CUSTOMER":
+            raise ValueError(f"{c['in_reply_to']} is not waiting for a customer reply")
+        store.log(c["in_reply_to"], "customer", "customer_replied", c["text"])
+        c = follow_up_complaint(case["record"]["complaint"], c["text"])
     rec = process_complaint(c)
     store.save_case(rec)
-    print(f"{c['complaint_id']}: {rec.category} {rec.decision.outcome} RM{rec.decision.refund_amount_myr:.2f} "
-          f"-> {rec.decision.route} ({rec.status})", flush=True)
+    d = rec.decision
+    what = f"{d.outcome} RM{d.refund_amount_myr:.2f} -> {d.route}" if d.decided else "no decision yet"
+    print(f"{c['complaint_id']}: {rec.category} {what} ({rec.status})", flush=True)
 
 
 def main():

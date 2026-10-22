@@ -52,9 +52,17 @@ Prefer an activated shell? `.\.venv\Scripts\Activate.ps1` (Windows) or `source .
 **LLM on:** set these in the shell that runs the worker or batch, before starting it (see `.env.example`). With them unset, the rules and templates run and everything still works.
 
 ```powershell
+# Anthropic (model defaults to claude-opus-5-5)
 $env:LLM_PROVIDER = "anthropic"
 $env:ANTHROPIC_API_KEY = "sk-ant-..."                # never commit this
+
+# or OpenAI (LLM_MODEL is required)
+$env:LLM_PROVIDER = "openai"
+$env:OPENAI_API_KEY = "sk-..."                       # never commit this
+$env:LLM_MODEL = "<openai-model-id>"
 ```
+
+If the LLM call fails (bad key, missing model), the pipeline falls back to the rules and templates and records `rules (llm failed: …)` as the extraction source in the case trace, so check the trace if results look rule-based.
 
 **Common snags**
 
@@ -108,6 +116,10 @@ Goal: category and language near 100%; replies a bank would send; a self-check j
 - [ ] Few-shot examples in the extraction prompt, picked from the confused categories
 - [ ] Better replies per category in EN and MS: tone, SLA timeline, short (judges read 10)
 - [ ] Harden `checks.py`: wrong refund amount, refund promised on a decline, wrong language. Try to break it like a judge would
+- [x] LLM reliability: timeouts, SDK retries, a per-complaint call/token budget, and every failure recorded by kind (`timeout`, `refusal`, `bad_json`, ...) with a fallback to rules/templates. Tests in `tests/test_llm.py` use fake clients (no key, no cost)
+- [x] Intents: vague complaints get a follow-up question (the case stays open as `AWAITING_CUSTOMER` with no decision until the customer replies), off-topic messages get a polite answer (`ANSWERED`). Possible fraud never waits; after 2 unanswered follow-ups an officer takes over
+- [ ] Measure intent on real phrasing: the LLM must not mark specific complaints as `NEEDS_DETAILS` (check `intents:` in the `run_batch` summary on train, where every message is a real complaint)
+- [ ] A date phrase in a customer's follow-up reply ("yesterday") is read relative to the original message time, not the reply time
 
 ### C: platform and demo
 Goal: the live round works without a hitch; test predictions in early.
@@ -117,9 +129,19 @@ Goal: the live round works without a hitch; test predictions in early.
 - [ ] Re-run the self-check on an officer's edited reply before it is sent (`TODO(C)` in `store.approve`)
 - [ ] Case page clearly shows why it decided, timing per step, and cost (engineering score)
 - [ ] *Optional, decide at Checkpoint 2:* a React frontend (see "Frontend: Streamlit or React" below)
-- [ ] Live-round test set: ~10 tricky complaints written fresh (Malay, mixed, call-centre note, 65+, > RM500, scam, ambiguous)
-- [ ] Test predictions early: `run_batch --split test --team <team-name>`, branch `team/<team-name>`, PR well before 15:00 Day 2. Re-run as A and B improve
-- [ ] Ask the organisers what `received_at` judges will use
+- [ ] **Live-round intake:** judges hand us `complaints.csv` rows (`complaint_id, customer_id, received_at, channel, subject, text`, IDs `LIVE-01`…, received on 30 Sep 2026), which must go in with no code changes. The API already takes all six fields; the Streamlit form needs `complaint_id` and `subject` fields, and ideally a "paste a CSV row" box (or a script that drops a CSV file's rows into `inbox/`)
+- [ ] Live-round test set: ~10 tricky complaints written fresh **as CSV rows in that format** (Malay, mixed, call-centre note, 65+, > RM500, scam, ambiguous). Rehearse feeding them in
+- [ ] Test predictions early: `run_batch --split test --team <team-name>`, then a PR from our fork to the original repo titled `Submission: <team-name>`, well before 15:00 Day 2. Re-run as A and B improve
+
+#### Optional: the "Best Ops Platform" award (only once the core works)
+A separate award, see [docs/bonus_platform.md](docs/bonus_platform.md) and the summary in [END_GOAL.md](END_GOAL.md). In order:
+
+- [ ] **Never overwrite the agent's decision.** `store.approve` currently replaces `reply_text` with the officer's edit. Keep the agent's fields as they were and store what staff did (`final_action`, final reply) separately. The `predictions.csv` export must stay the agent's output
+- [ ] **Self-check on edited replies** before "send" unlocks (also the `TODO(C)` above)
+- [ ] **Audit with old → new values and a reason** for every action that changes the agent's decision
+- [ ] **Roles:** seeded `users` (`officer`, `fraud`, `manager`, with `approval_limit_myr`); each sees only their queue, sorted by priority and SLA due time
+- [ ] **Two-tier approval:** over the officer's limit or sensitive → `ESCALATED`, waits for the manager. Fraud analyst actions: acknowledge → log investigation / recall → record outcome
+- [ ] Separate screens per role (resolution desk, fraud workbench, manager console with override rate and SLA)
 - [ ] Demo script for 8 minutes, rehearsed
 
 ### Shared milestones
@@ -144,6 +166,9 @@ The React app is only a client of `app/api.py`. The agent, worker and store don'
 | Case detail (decision, evidence, trace, audit log) | `GET /cases/{id}` |
 | Approve / reject | `POST /cases/{id}/approve` / `POST /cases/{id}/reject` with `{officer, reply_text?, note?}` |
 | Queue counts | `GET /stats` |
+| Awaiting customer / customer's answer | `GET /cases?status=AWAITING_CUSTOMER` / `POST /cases/{id}/messages` with `{text}` |
+
+Statuses: open `AWAITING_CUSTOMER`, `PENDING_APPROVAL`, `FRAUD_QUEUE`; closed `RESOLVED`, `APPROVED`, `REJECTED`, `ANSWERED` (see `agent/schemas.py`). An `AWAITING_CUSTOMER` case has no decision yet: `outcome`, `route`, `matched_txn_id` and `refund_amount_myr` are `null`, so show "-". The message thread is in the case's `audit` list.
 
 CORS already allows `http://localhost:5173` (Vite) and `http://localhost:3000`. Set `CORS_ORIGINS` (comma-separated) for other origins. A React demo needs three processes: `python -m app.worker`, `uvicorn app.api:app --port 8000`, and `npm run dev` in `web/`.
 
@@ -153,9 +178,12 @@ If C doesn't know React well, spend that day on Streamlit styling, the live-roun
 
 - **Code decides money.** No LLM output ever sets outcome, refund, priority or route.
 - **Branches:** `a/...`, `b/...`, `c/...` → PR into `main`. Run the tests and a train run before merging, and post the score in the PR.
-- **Test predictions early.** `python -m scripts.run_batch --split test --team <team-name>` writes `submissions/<team-name>/predictions.csv`. Submit from branch `team/<team-name>` before 15:00 on Day 2.
+- **Test predictions early.** `python -m scripts.run_batch --split test --team <team-name>` writes `submissions/<team-name>/predictions.csv`. Submit with a PR from our fork to `DM-Data-Science/teratai-complaints-hackathon`, titled `Submission: <team-name>`, before 15:00 on Day 2. It only needs the predictions file.
+- **Keep up with the original repo.** It may get clarifications (never data changes). To bring them in: `git fetch upstream`, then `git merge upstream/main` on `main` and push (or use GitHub's **Sync fork** button). The `upstream` remote points at `DM-Data-Science/teratai-complaints-hackathon`; add it with `git remote add upstream https://github.com/DM-Data-Science/teratai-complaints-hackathon.git` if your clone lacks it.
 - **No keys in the repo.** No hand-labelling of test complaints.
 
-## Open questions for the organisers
+## Questions for the organisers
 
-- Live round: what `received_at` will judges use? Transactions end in September 2026, so the UI defaults to `2026-09-30 18:00`.
+Ask by [opening an issue](https://github.com/DM-Data-Science/teratai-complaints-hackathon/issues) on the original repo; every team sees the answers.
+
+- ~~Live round: what `received_at` will judges use?~~ Answered: 30 Sep 2026, in `complaints.csv` row format (README, "The live round"). The UI's default `2026-09-30 18:00` fits.

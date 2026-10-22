@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from app import store
-from app.worker import submit
+from app.worker import submit, submit_reply
 
 app = FastAPI(title="Teratai complaints agent")
 
@@ -45,6 +45,19 @@ class ApprovalIn(BaseModel):
 def create_complaint(body: ComplaintIn):
     cid = submit({k: v for k, v in body.model_dump().items() if v is not None})
     return {"complaint_id": cid, "status": "QUEUED"}
+
+
+class CustomerReplyIn(BaseModel):
+    text: str
+
+
+@app.post("/cases/{complaint_id}/messages", status_code=202)
+def customer_reply(complaint_id: str, body: CustomerReplyIn):
+    """The customer answers a follow-up question; the worker reprocesses the case with the extra details."""
+    case = store.get_case(complaint_id)
+    if not case or case["status"] != "AWAITING_CUSTOMER":
+        raise HTTPException(409, f"{complaint_id} is not waiting for a customer reply")
+    return {"message_id": submit_reply(complaint_id, body.text), "status": "QUEUED"}
 
 
 @app.get("/cases")

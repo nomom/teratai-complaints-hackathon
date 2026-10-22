@@ -12,15 +12,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import streamlit as st  # noqa: E402
 
 from app import store  # noqa: E402
-from app.worker import submit  # noqa: E402
+from app.worker import submit, submit_reply  # noqa: E402
 
 st.set_page_config(page_title="Teratai complaints", layout="wide")
 # Transactions run April-September 2026, so live complaints default to a received time just after that.
 DEFAULT_RECEIVED = "2026-09-30 18:00"
 CHANNELS = ["App chat", "Email", "Call centre note", "Branch form", "Social media DM"]
 
-page = st.sidebar.radio("Page", ["Submit complaint", "Approval queue", "Fraud queue", "All cases"])
+page = st.sidebar.radio("Page", ["Submit complaint", "Approval queue", "Fraud queue", "Awaiting customer", "All cases"])
 st.sidebar.write(store.counts())
+
+
+def money(v):
+    return "-" if v is None else f"RM{v:.2f}"
 
 
 def show_case(case, actions=False):
@@ -28,11 +32,16 @@ def show_case(case, actions=False):
     d = rec["decision"]
     cols = st.columns(6)
     for col, (k, v) in zip(cols, [("Category", case["category"]), ("Transaction", case["matched_txn_id"] or "-"),
-                                  ("Outcome", case["outcome"]), ("Refund", f"RM{case['refund_amount_myr']:.2f}"),
-                                  ("Priority", case["priority"]), ("Route", case["route"])]):
+                                  ("Outcome", case["outcome"] or "-"), ("Refund", money(case["refund_amount_myr"])),
+                                  ("Priority", case["priority"]), ("Route", case["route"] or "-")]):
         col.metric(k, v)
-    st.caption(f"Status **{case['status']}** · reply in {case['reply_language']} · SLA acknowledge by {case['sla_due']}"
-               f" · flags {json.loads(case['flags']) or 'none'}")
+    if not case["outcome"]:
+        st.info("No decision yet: the agent is waiting for the customer's details.")
+    ex = rec["extraction"]
+    st.caption(f"Status **{case['status']}** · intent {ex.get('intent', 'COMPLAINT')}"
+               f"{' (' + ex['confidence'] + ' confidence)' if ex.get('confidence') else ''}"
+               f" · reply in {case['reply_language']} · SLA acknowledge by {case['sla_due']}"
+               f" · flags {json.loads(case['flags']) or 'none'} · extraction by {ex.get('source', 'rules')}")
     st.markdown("**Complaint:** " + case["text"])
     st.markdown("**Why:**\n" + "\n".join(f"- {r}" for r in d["reasons"]))
     if rec["check_problems"]:
@@ -52,12 +61,32 @@ def show_case(case, actions=False):
             st.rerun()
     else:
         st.text_area("Reply", case["reply_text"], height=180, disabled=True, key=f"r-{case['complaint_id']}")
+    if case["status"] == "AWAITING_CUSTOMER":
+        customer_reply_box(case)
     with st.expander("Evidence"):
         st.json(d["evidence"])
     with st.expander("Trace (each step, timing, LLM usage)"):
         st.json({"trace": rec["trace"], "llm_usage": rec["llm_usage"], "extraction": rec["extraction"]})
     with st.expander("Audit log"):
         st.table(case["audit"])
+
+
+def customer_reply_box(case):
+    """Plays the customer's side: answer the follow-up question, and the worker reprocesses the case."""
+    cid = case["complaint_id"]
+    answer = st.text_area("Customer's answer to the follow-up question", key=f"c-{cid}")
+    if st.button("Send customer reply", key=f"s-{cid}") and answer.strip():
+        before = case["record"]["complaint"].get("follow_ups", 0)
+        submit_reply(cid, answer)
+        with st.spinner("Waiting for the worker..."):
+            for _ in range(60):
+                time.sleep(0.5)
+                now = store.get_case(cid)
+                if now and now["record"]["complaint"].get("follow_ups", 0) > before:
+                    break
+            else:
+                st.warning("Not processed yet. Is `python -m app.worker` running?")
+        st.rerun()
 
 
 if page == "Submit complaint":
@@ -80,13 +109,22 @@ if page == "Submit complaint":
         else:
             st.warning("Not processed yet. Is `python -m app.worker` running?")
 
+elif page == "Awaiting customer":
+    rows = store.list_cases("AWAITING_CUSTOMER")
+    st.header(f"Awaiting customer ({len(rows)})")
+    st.caption("Open cases with no decision yet: we asked these customers for more details. "
+               "Their reply continues the case automatically.")
+    for row in rows:
+        with st.expander(f"{row['complaint_id']} · {row['customer_id']} · {row['text'][:80]}"):
+            show_case(store.get_case(row["complaint_id"]))
+
 elif page in ("Approval queue", "Fraud queue"):
     status = "PENDING_APPROVAL" if page == "Approval queue" else "FRAUD_QUEUE"
     rows = store.list_cases(status)
     st.header(f"{page} ({len(rows)})")
     for row in rows:
-        with st.expander(f"{row['complaint_id']} · {row['priority']} · {row['category']} · {row['outcome']} "
-                         f"RM{row['refund_amount_myr']:.2f}"):
+        with st.expander(f"{row['complaint_id']} · {row['priority']} · {row['category']} · "
+                         f"{row['outcome'] or 'follow-up question'} {money(row['refund_amount_myr'])}"):
             show_case(store.get_case(row["complaint_id"]), actions=True)
 
 else:
