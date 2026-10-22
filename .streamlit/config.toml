@@ -1,0 +1,26 @@
+# Teratai Ops theme: deep indigo night, one violet accent, status colours reserved for meaning.
+# This is the DARK BASELINE. Streamlit can't switch config.toml at runtime, so light mode is a token set that
+# app/ui_kit.py (get_theme_css) injects as CSS when st.session_state["theme"] == "light".
+# Dark tokens mirror THEMES["dark"] in app/ui_kit.py; change both together.
+[theme]
+base = "dark"
+primaryColor = "#6D4AFF"
+backgroundColor = "#0E0B1F"
+secondaryBackgroundColor = "#17142B"
+textColor = "#F2F0F7"
+linkColor = "#9C86FF"
+borderColor = "#2C2747"
+dataframeBorderColor = "#2C2747"
+showWidgetBorder = true
+baseRadius = "8px"
+# Inter from Google Fonts; falls back to IBM Plex Sans / system sans when offline.
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap, IBM Plex Sans, sans-serif"
+headingFont = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap, IBM Plex Sans, sans-serif"
+
+[theme.sidebar]
+backgroundColor = "#0A0818"
+secondaryBackgroundColor = "#17142B"
+borderColor = "#2C2747"
+
+[client]
+toolbarMode = "minimal"
