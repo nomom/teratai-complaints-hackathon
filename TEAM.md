@@ -27,42 +27,27 @@ The contracts between you are in `agent/schemas.py` (`Extraction`, `Decision`, `
 
 ## Setup
 
-| Person | Needs installed |
-|---|---|
-| A | Nothing: the core runs on plain Python 3.10+ |
-| B | `anthropic` (for the LLM): `uv venv`, then `uv pip install anthropic` |
-| C | Everything in `requirements.txt`: `anthropic`, `fastapi`, `uvicorn`, `streamlit` |
+One [uv](https://docs.astral.sh/uv/) project for the whole repo: `pyproject.toml` and `uv.lock` at the root pin the exact packages (`anthropic`, `openai`, `fastapi`, `uvicorn`, `streamlit`) and Python 3.12, so all three laptops run the same thing. Install uv once with `pip install uv`, or `powershell -c "irm https://astral.sh/uv/install.ps1 | iex"`.
 
-**Everyone:** check the core works (run from the repo root).
-
-```bash
-python -m unittest discover tests                    # stdlib only, no install needed
-python -m scripts.run_batch --split train            # train run + score + per-category table; ends with FINAL SCORE 92.16
-```
-
-**Person C: the app (Windows PowerShell, from the repo root)**
-
-We use [uv](https://docs.astral.sh/uv/). Install it once with `pip install uv`, or `powershell -c "irm https://astral.sh/uv/install.ps1 | iex"`.
+**Everyone, from the repo root:**
 
 ```powershell
-# 1. Virtual environment (once)
-uv venv                                              # creates .venv (git-ignored)
-.\.venv\Scripts\Activate.ps1
-uv pip install -r requirements.txt
-
-# 2. Terminal 1: the worker that reacts to new complaints
-python -m app.worker
-
-# 3. Terminal 2 (activate .venv again): the dashboard
-python -m streamlit run app/ui.py                    # http://localhost:8501
-
-# 4. Optional, terminal 3: the HTTP API
-python -m uvicorn app.api:app --port 8000            # docs at http://localhost:8000/docs
+uv sync                                              # creates/updates .venv (git-ignored) from uv.lock
+uv run python -m unittest discover tests             # tests
+uv run python -m scripts.run_batch --split train     # train run + score + per-category table; ends with FINAL SCORE 92.16
 ```
 
-On macOS or Linux, activate with `source .venv/bin/activate`.
+`uv run` uses the root `.venv` without activating it. After a `git pull` that changes `uv.lock`, run `uv sync` again. To add a package: `uv add <package>`, then commit `pyproject.toml` and `uv.lock` together.
 
-You can also skip activation: prefix any command with `uv run --with-requirements requirements.txt`, e.g. `uv run --with-requirements requirements.txt python -m app.worker`.
+**The app (Person C runs it; anyone can):**
+
+```powershell
+uv run python -m app.worker                          # terminal 1: reacts to new complaints
+uv run python -m streamlit run app/ui.py             # terminal 2: dashboard, http://localhost:8501
+uv run python -m uvicorn app.api:app --port 8000     # optional, terminal 3: API, docs at http://localhost:8000/docs
+```
+
+Prefer an activated shell? `.\.venv\Scripts\Activate.ps1` (Windows) or `source .venv/bin/activate` (macOS/Linux), then drop the `uv run` prefix.
 
 **LLM on:** set these in the shell that runs the worker or batch, before starting it (see `.env.example`). With them unset, the rules and templates run and everything still works.
 
@@ -73,7 +58,8 @@ $env:ANTHROPIC_API_KEY = "sk-ant-..."                # never commit this
 
 **Common snags**
 
-- **The activate script is blocked:** run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once, or use `uv run` and skip activation.
+- **The activate script is blocked:** use `uv run` and skip activation, or run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once.
+- **Don't run `uv init` again,** in the root or in a subfolder: the root project already covers the whole repo.
 - **`ModuleNotFoundError: agent` or `app`:** run commands from the repo root.
 - **The dashboard says "Not processed yet":** the worker (terminal 1) isn't running.
 - **A typed complaint finds no transaction:** keep the received time near the transaction date (the form defaults to 2026-09-30). Test first with the examples in [END_GOAL.md](END_GOAL.md).
@@ -126,7 +112,7 @@ Goal: category and language near 100%; replies a bank would send; a self-check j
 ### C: platform and demo
 Goal: the live round works without a hitch; test predictions in early.
 
-- [ ] `uv pip install -r requirements.txt` (see Setup), run the worker + UI (+ API) for the first time, fix what breaks (they haven't been run yet)
+- [ ] `uv sync` (see Setup), run the worker + UI (+ API) for the first time, fix what breaks (they haven't been run yet)
 - [ ] Push one complaint down each path: auto-resolved refund, decline → approval queue, refund > RM500 → approval queue, fraud → fraud queue. Approve and reject update the audit log
 - [ ] Re-run the self-check on an officer's edited reply before it is sent (`TODO(C)` in `store.approve`)
 - [ ] Case page clearly shows why it decided, timing per step, and cost (engineering score)
