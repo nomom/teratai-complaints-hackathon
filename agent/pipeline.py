@@ -14,7 +14,7 @@ from __future__ import annotations
 import datetime as dt
 import time
 
-from . import checks, extract, llm, matching, policy, reply, tools
+from . import checks, crosscheck, extract, llm, matching, policy, reply, tools
 from .schemas import CaseRecord, Complaint, Decision
 
 STATUS_BY_ROUTE = {"AUTO_RESOLVE": "RESOLVED","HUMAN_APPROVAL": "PENDING_APPROVAL", "FRAUD_TEAM": "FRAUD_QUEUE"}
@@ -36,7 +36,7 @@ def process_complaint(c: dict, oracle_category: str | None = None) -> CaseRecord
 
     ex = step("understand", lambda: extract.extract(c, usage))
     if oracle_category:
-        ex.category, ex.intent = oracle_category, "COMPLAINT"
+        ex.category, ex.intent, ex.crosscheck = oracle_category, "COMPLAINT", {}
     trace[-1]["detail"] = ex.to_dict()
     lang = extract.reply_language(c, ex.language)
     follow_ups = int(c.get("follow_ups") or 0)
@@ -59,6 +59,9 @@ def process_complaint(c: dict, oracle_category: str | None = None) -> CaseRecord
                                "flags": match.flags}
         if ex.intent == "NEEDS_DETAILS":           # fraud category, or follow-ups used up: never stall the case
             match.flags.append("DETAILS_STILL_MISSING" if follow_ups >= MAX_FOLLOW_UPS else "VAGUE_FRAUD_REPORT")
+        if crosscheck.needs_officer(ex):           # LLM and rules disagreed and the second look didn't settle it
+            match.flags.append(crosscheck.OFFICER_FLAG)
+            match.reasons.append(crosscheck.officer_reason(ex))
         decision = step("decide", lambda: policy.decide(c, ex.category, match))
         trace[-1]["detail"] = {"outcome": decision.outcome, "refund": decision.refund_amount_myr,
                                "reasons": decision.reasons}

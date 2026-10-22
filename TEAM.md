@@ -115,6 +115,8 @@ Goal: category and language near 100%; replies a bank would send; a self-check j
 - [ ] Turn the LLM on (`LLM_PROVIDER=anthropic`), run 100–200 train complaints, compare against the rules, record tokens and cost per complaint
 - [x] Few-shot examples in the extraction prompt, picked from the confused categories (plus one vague and one off-topic message)
 - [ ] Decide, from measurement, whether the reply language comes from the LLM or from `detect_language()` (100% on train)
+- [x] Cross-check (`agent/crosscheck.py`): when the LLM's category differs from a keyword the rules matched, one "second look" call picks between the two. It sees both options unlabelled, plus what each would match in the customer's transactions, and must quote the message. A quote that isn't in the message, low confidence, or leaving a fraud category without high confidence → `CROSSCHECK_UNRESOLVED`, the officer decides
+- [ ] Measure the cross-check with the LLM on (`crosscheck:` line in the `run_batch` summary). On train every disagreement is an LLM mistake (rules are 100%), so count how many the second look fixes vs how many correct answers it flips. Drop it if it flips more than it fixes
 - [ ] Better replies per category in EN and MS: tone, SLA timeline, short (judges read 10)
 - [ ] Harden `checks.py`: wrong refund amount, refund promised on a decline, wrong language. Try to break it like a judge would
 - [x] LLM reliability: timeouts, SDK retries, a per-complaint call/token budget, and every failure recorded by kind (`timeout`, `refusal`, `bad_json`, ...) with a fallback to rules/templates. Tests in `tests/test_llm.py` use fake clients (no key, no cost)

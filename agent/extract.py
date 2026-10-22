@@ -11,9 +11,9 @@ from __future__ import annotations
 
 import re
 
-from . import llm, tools
+from . import crosscheck, llm, tools
 from .dates import month_of
-from .schemas import CATEGORIES, CONFIDENCE, INTENTS, Extraction
+from .schemas import CATEGORIES, CATEGORY_GUIDE, CONFIDENCE, INTENTS, Extraction
 
 MISSING_INFO = ["what_happened", "transaction_type", "date", "amount", "merchant_or_recipient", "card_last4"]
 
@@ -55,9 +55,14 @@ def _any_word(patterns: list[str], low: str) -> bool:
     return any(re.search(rf"(?<![a-z0-9]){p}(?![a-z0-9])", low) for p in patterns)
 
 
-def rules_category(text: str) -> str:
+def rules_match(text: str) -> str | None:
+    """The category whose keywords the text contains, or None when no keyword matched (the rules don't know)."""
     low = text.lower()
-    return next((c for c, words in KEYWORDS if _any_word(words, low)), "SERVICE_QUALITY")
+    return next((c for c, words in KEYWORDS if _any_word(words, low)), None)
+
+
+def rules_category(text: str) -> str:
+    return rules_match(text) or "SERVICE_QUALITY"
 # Language: Malay words count anywhere; English words only in lowercase (or as the first word), because
 # capitalised English is usually part of a name ("Shah Alam Branch", "BETZONE ONLINE"). Colloquial messages that
 # mix the two ("app asyik logout sendiri 3 hari dah") are MIXED, and get a reply in the preferred language.
@@ -169,13 +174,7 @@ missing_info: for NEEDS_DETAILS only (else []): what the customer should tell us
 date, amount, merchant_or_recipient, card_last4.
 
 Categories:
-- DUPLICATE_CHARGE: a card purchase charged more than once
-- FAILED_TRANSFER: a DuitNow/IBG transfer failed or didn't arrive but money left the account
-- ATM_NOT_DISPENSED: an ATM gave less cash than requested
-- UNAUTHORISED_CARD: the customer says they did not make a card transaction
-- SCAM_TRANSFER: the customer was tricked into sending money themselves (fake police, job, parcel, investment, romance)
-- FEE_DISPUTE: the customer disputes a bank fee
-- SERVICE_QUALITY: branch, app, hotline or staff complaints with no money in dispute
+""" + CATEGORY_GUIDE + """
 
 Watch for these, which are easy to miss:
 - An ATM complaint need not say "ATM": "the machine did not dispense", "I withdrew ... did not give me the cash",
@@ -234,7 +233,11 @@ def extract(complaint: dict, usage: llm.Usage | None = None) -> Extraction:
     """The rules path always returns intent COMPLAINT: only the LLM can tell a vague or off-topic message apart."""
     if llm.enabled():
         try:
-            return _fraud_safety_net(complaint, extract_llm(complaint, usage))
+            ex = _fraud_safety_net(complaint, extract_llm(complaint, usage))
+            if ex.intent == "COMPLAINT" and not ex.source.startswith("llm (scam"):
+                text = f"{complaint.get('subject', '')} {complaint['text']}"
+                ex = crosscheck.check(complaint, ex, rules_match(text), usage)
+            return ex
         except llm.LLMError as e:          # never lose a complaint over an LLM error
             reason = e.kind
         except Exception as e:  # noqa: BLE001 -- e.g. a bug in parsing; still fall back, but say so

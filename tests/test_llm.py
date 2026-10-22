@@ -27,7 +27,8 @@ class APITimeoutError(Exception):
 
 
 class FakeOpenAI:
-    """responses.create: a schema request returns `extract` (dict, raw str or exception); otherwise `reply`."""
+    """responses.create: a schema request returns `extract` (dict, raw str or exception; a list gives one per call,
+    e.g. [first reading, second look]); otherwise `reply`."""
 
     def __init__(self, extract=None, reply="Thank you for your message. Please tell us the date and what happened, "
                                            "and we will help.\n\nTeratai Bank Customer Care",
@@ -39,6 +40,8 @@ class FakeOpenAI:
     def create(self, **kw):
         self.calls.append(kw)
         out = self.extract if "text" in kw else self.reply
+        if isinstance(out, list):
+            out = out.pop(0)
         if isinstance(out, Exception):
             raise out
         text = "" if self.refusal else (json.dumps(out) if isinstance(out, dict) else out)
@@ -225,6 +228,71 @@ class Intents(LLMTestCase):
         rec = process_complaint(self.complaint("still a problem", cid="TEST-MAX", follow_ups=MAX_FOLLOW_UPS))
         self.assertEqual(rec.decision.route, "HUMAN_APPROVAL")
         self.assertIn("DETAILS_STILL_MISSING", rec.decision.flags)
+
+
+class CrossCheck(LLMTestCase):
+    """LLM vs keyword rules on category; a disagreement gets one evidence-based second look, else an officer."""
+
+    ATM = "CMP-01057"     # "The machine did not dispense all of the cash when I withdrew RM1500.00 today" -> TXN-0143117
+
+    def atm(self):
+        return tools.get_db().complaints[self.ATM]
+
+    def second_look(self, category, quote, confidence="high"):
+        return {"category": category, "quote": quote, "confidence": confidence}
+
+    def test_agreement_needs_no_second_look(self):
+        client = self.use(FakeOpenAI(extraction(category="ATM_NOT_DISPENSED", amount=1500.0)))
+        ex = extract.extract(self.atm(), llm.Usage())
+        self.assertEqual((ex.category, ex.crosscheck, len(client.calls)), ("ATM_NOT_DISPENSED", {"result": "agree"}, 1))
+
+    def test_rules_without_a_keyword_have_no_opinion(self):
+        client = self.use(FakeOpenAI(extraction(category="SERVICE_QUALITY")))
+        ex = extract.extract(self.complaint("Your new statement layout is confusing to read."), llm.Usage())
+        self.assertEqual((ex.crosscheck["result"], len(client.calls)), ("rules_no_opinion", 1))
+
+    def test_second_look_corrects_the_llm(self):
+        client = self.use(FakeOpenAI([extraction(category="SERVICE_QUALITY", amount=1500.0),
+                                      self.second_look("ATM_NOT_DISPENSED", "did not dispense all of the cash")]))
+        rec = process_complaint(self.atm())
+        self.assertEqual((rec.category, rec.decision.matched_txn_id), ("ATM_NOT_DISPENSED", "TXN-0143117"))
+        self.assertEqual(rec.extraction.crosscheck["resolution"], "second_look")
+        self.assertNotIn("CROSSCHECK_UNRESOLVED", rec.decision.flags)
+        prompt = client.calls[1]["input"]                       # the second look's question
+        self.assertIn("ATM_NOT_DISPENSED or SERVICE_QUALITY", prompt)
+        self.assertIn("ATM Withdrawal", prompt)                 # it was shown the customer's records
+        self.assertNotIn("rules", prompt.lower())               # and not told which reading came from where
+
+    def test_second_look_can_keep_the_llm_reading(self):
+        self.use(FakeOpenAI([extraction(category="FEE_DISPUTE", amount=12.0),
+                             self.second_look("FEE_DISPUTE", "RM12 annual fee")]))
+        ex = extract.extract(self.complaint("I feel deceived by this RM12 annual fee on my debit card."), llm.Usage())
+        self.assertEqual((ex.category, ex.crosscheck["rules"], ex.crosscheck["resolution"]),
+                         ("FEE_DISPUTE", "SCAM_TRANSFER", "second_look"))
+
+    def test_invented_quote_goes_to_an_officer(self):
+        self.use(FakeOpenAI([extraction(category="SERVICE_QUALITY", amount=1500.0),
+                             self.second_look("ATM_NOT_DISPENSED", "the ATM swallowed my card")]))
+        rec = process_complaint(self.atm())
+        self.assertEqual((rec.category, rec.decision.route), ("SERVICE_QUALITY", "HUMAN_APPROVAL"))
+        self.assertIn("CROSSCHECK_UNRESOLVED", rec.decision.flags)
+        self.assertTrue(any("please confirm the category" in r for r in rec.decision.reasons))
+
+    def test_leaving_a_fraud_category_needs_high_confidence(self):
+        text = "I feel deceived by this RM12 annual fee on my debit card."
+        for confidence, resolution in [("medium", "officer"), ("high", "second_look")]:
+            with self.subTest(confidence=confidence):
+                self.use(FakeOpenAI([extraction(category="FEE_DISPUTE", amount=12.0),
+                                     self.second_look("FEE_DISPUTE", "annual fee", confidence)]))
+                ex = extract.extract(self.complaint(text), llm.Usage())
+                self.assertEqual((ex.category, ex.crosscheck["resolution"]), ("FEE_DISPUTE", resolution))
+
+    def test_second_look_failure_goes_to_an_officer(self):
+        self.use(FakeOpenAI([extraction(category="SERVICE_QUALITY", amount=1500.0), APITimeoutError("down")]))
+        usage = llm.Usage()
+        ex = extract.extract(self.atm(), usage)
+        self.assertEqual((ex.category, ex.source, ex.crosscheck["resolution"]), ("SERVICE_QUALITY", "llm", "officer"))
+        self.assertIn("timeout", usage.failures)
 
 
 class CaseLifecycle(LLMTestCase):
