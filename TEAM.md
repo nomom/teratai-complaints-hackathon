@@ -8,8 +8,8 @@ One app, three owners. Every path (live demo, inbox, 750-complaint batch) runs t
 inbox/*.json ─► app/worker.py ─► agent/pipeline.py ─► app/store.py (SQLite) ─► app/ui.py (queues)
   ▲  (API + UI drop files here)     │
   │                                 ├─ 1 UNDERSTAND  agent/extract.py   (B: LLM, rules fallback)
-app/api.py                          ├─ 2 FIND        agent/matching.py  (A: code) + agent/dates.py
-                                    ├─ 3 DECIDE      agent/policy.py    (A: code)
+app/api.py                          ├─ 2 FIND        agent/decision/matching.py  (A: code) + decision/dates.py
+                                    ├─ 3 DECIDE      agent/decision/policy.py    (A: code)
 scripts/run_batch.py ───────────────┤─ 4 DRAFT       agent/reply.py     (B: LLM, template fallback)
   (predictions.csv + score)         ├─ 5 CHECK       agent/checks.py    (B: code)
                                     └─ 6 ROUTE       agent/policy.route + pipeline (A/C)
@@ -19,7 +19,7 @@ scripts/run_batch.py ───────────────┤─ 4 DRAFT
 
 | Person | Owns | Measure of done |
 |---|---|---|
-| **A: matching and decisions** | `agent/dates.py`, `agent/matching.py`, `agent/policy.py`, `agent/tools.py` | `run_batch --split train --oracle-category` near 100 on txn/outcome/refund |
+| **A: matching and decisions** | `agent/decision/` (`dates.py`, `matching.py`, `policy.py`), `agent/data/tools.py`. The old paths (`agent/matching.py`...) are aliases, so `from agent import matching` still works | `run_batch --split train --oracle-category` near 100 on txn/outcome/refund |
 | **B: LLM layer** | `agent/llm.py`, `agent/extract.py`, `agent/reply.py`, `agent/checks.py` | category and language near 100%; replies that read well; self-check catches bad replies |
 | **C: platform and delivery** | `agent/pipeline.py`, `app/*`, `scripts/run_batch.py`, the demo | live round works end to end; test predictions submitted early |
 
@@ -34,7 +34,7 @@ One [uv](https://docs.astral.sh/uv/) project for the whole repo: `pyproject.toml
 ```powershell
 uv sync                                              # creates/updates .venv (git-ignored) from uv.lock
 uv run python -m unittest discover tests             # tests
-uv run python -m scripts.run_batch --split train     # train run + score + per-category table; ends with FINAL SCORE 98.89 (LLM off)
+uv run python -m scripts.run_batch --split train     # train run + score + per-category table; ends with FINAL SCORE 99.91 (LLM off)
 ```
 
 `uv run` uses the root `.venv` without activating it. After a `git pull` that changes `uv.lock`, run `uv sync` again. To add a package: `uv add <package>`, then commit `pyproject.toml` and `uv.lock` together.
@@ -75,24 +75,24 @@ If the LLM call fails (bad key, missing model), the pipeline falls back to the r
 - **A typed complaint finds no transaction:** keep the received time near the transaction date (the form defaults to 2026-09-30). Test first with the examples in [END_GOAL.md](END_GOAL.md).
 - **Code changes don't show up:** restart the worker after pulling.
 
-## Where we are (offline, no LLM): train score 98.89, zero critical errors
+## Where we are (offline, no LLM): train score 99.91, zero critical errors
 
-Started at 92.16. B's rule fixes (ATM and scam phrasings, language detection) took category and reply language to 100%.
+Started at 92.16. B's rule fixes (ATM and scam phrasings, language detection) took category and reply language to 100% (98.89); A's matching (hedged amounts up to 20% off, town names aren't merchant names) cleared all 23 `NO_MATCH` (99.91).
 
 ```
 true category           n  category     txn  outcome  refund   prio   lang
 ATM_NOT_DISPENSED     213      100%    100%     100%    100%   100%   100%
-DUPLICATE_CHARGE      249      100%     96%      96%     96%   100%   100%
-FAILED_TRANSFER       277      100%     96%      96%     96%   100%   100%
+DUPLICATE_CHARGE      249      100%    100%     100%    100%   100%   100%
+FAILED_TRANSFER       277      100%    100%     100%    100%   100%   100%
 FEE_DISPUTE           270      100%    100%     100%    100%   100%   100%
 SCAM_TRANSFER         213      100%    100%     100%    100%   100%   100%
 SERVICE_QUALITY       244      100%    100%     100%    100%   100%   100%
-UNAUTHORISED_CARD     284      100%     99%      99%     99%   100%   100%
+UNAUTHORISED_CARD     284      100%    100%     100%    100%   100%   100%
 ```
 
-The remaining gap is all transaction matching:
+Two training complaints are still wrong, both transaction matching (rounded to 100% above):
 
-1. **A:** 23 `NO_MATCH` flags and about 4% wrong transactions on duplicates and failed transfers. Read `submissions/our-team/predictions_train_details.csv`.
+1. **A:** CMP-01550 (duplicate charge, wrong pair of twins) and CMP-02357 (fee: "I thought the fee is only RM10" quotes the expected fee, not the charged one). Read `submissions/our-team/predictions_train_details.csv`.
 2. **B:** the rules are tuned on training phrasings. The live round uses fresh wording, which is where the LLM has to earn its place.
 
 ## To do, by person
@@ -102,8 +102,8 @@ Tick items off in your PRs. Highest value first.
 ### A: matching and decisions
 Goal: txn, outcome and refund near 100% with `run_batch --split train --oracle-category`.
 
-- [ ] Fix the 23 `NO_MATCH` cases: open `predictions_train_details.csv`, run `python starter/evidence_pack.py <id>`, find what broke (date phrase, amount tolerance, card last-4)
-- [ ] Fix the ~4% wrong transactions on DUPLICATE_CHARGE and FAILED_TRANSFER (several similar candidates: weigh date, amount and name better)
+- [x] Fix the 23 `NO_MATCH` cases: hedged amounts may be up to 20% off, town words aren't merchant names (0 `NO_MATCH` on train; 13 test complaints newly matched)
+- [ ] The last 2 wrong transactions on train: CMP-01550 (pick the right pair when several twins exist) and CMP-02357 (a fee complaint quoting the expected fee, not the charged one)
 - [x] *(done by B, please review)* A candidate needs at least one real clue (amount, card, date, name, fee, twin), else `NO_MATCH`. Before, "My DuitNow transfer failed, please help" with no amount or date matched the customer's only transfer and auto-refunded it: no date phrase resolves to the whole window, which had counted as a date clue. No change on train or test predictions; regression test in `tests/test_core.py`
 - [ ] Grow `dates.py` with the phrases you find ("minggu lepas", "awal bulan", "last weekend", ...)
 - [ ] Check `fee_due()` edge cases: card opened 29 Feb, customer turning 60 the month of the fee, a fee with no matching product
