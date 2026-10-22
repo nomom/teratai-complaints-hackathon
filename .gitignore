@@ -19,3 +19,5 @@ submissions/*/predictions_all*.csv
 tmp/
 # customer sign-ups (app/UserAccessControl/accounts.py): per laptop, never in this public repo
 data/customer_accounts.csv
+# design-check receipts written by the ux-ui-agent-skills gates; local only
+.ds-receipts/

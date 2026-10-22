@@ -1,0 +1,141 @@
+.case {
+  margin-top: var(--space-6);
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--border);
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.id {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  margin-right: var(--space-1);
+}
+
+.meta {
+  color: var(--text-2);
+  font-size: var(--text-sm);
+  margin: var(--space-1) 0 var(--space-3);
+}
+
+.headline {
+  font-size: 17px;
+  font-weight: 600;
+  margin: var(--space-4) 0 var(--space-2);
+}
+
+.decision {
+  margin-top: var(--space-2);
+}
+
+.block {
+  margin-top: var(--space-4);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.keyRow {
+  margin: var(--space-3) 0;
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow-x: auto;
+}
+
+.checked {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-2);
+  font-size: var(--text-sm);
+  margin: var(--space-3) 0;
+}
+
+.quote {
+  white-space: pre-wrap;
+  padding: var(--space-3);
+  background: var(--neutral-tint);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.facts {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.facts dt {
+  font-weight: 600;
+  margin-bottom: var(--space-1);
+}
+
+.facts dd {
+  margin: 0;
+}
+
+.json {
+  margin: 0;
+  max-height: 280px;
+  overflow: auto;
+  padding: var(--space-3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-2);
+}
+
+.stack {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.h4 {
+  font-size: var(--text-md);
+  font-weight: 600;
+  margin-bottom: var(--space-2);
+}
+
+.list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.scroll {
+  overflow-x: auto;
+}
+
+.mini {
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  min-width: 100%;
+}
+
+.mini th,
+.mini td {
+  text-align: left;
+  padding: var(--space-1) var(--space-3);
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.mini th {
+  color: var(--text-2);
+  font-weight: 500;
+}
+
+.detail {
+  max-width: 520px;
+  overflow-wrap: anywhere;
+}

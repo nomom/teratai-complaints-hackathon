@@ -1,0 +1,40 @@
+import { apiRequest } from '@/lib/apiClient';
+
+import type { CaseDetail, CaseRow, CaseStatus, CustomerCase, IntakeComplaint } from './types';
+
+const EVERY = 100000;
+
+export const listCases = (statuses?: CaseStatus[]) => {
+  const query = new URLSearchParams({ limit: String(EVERY) });
+  if (statuses?.length) query.set('status', statuses.join(','));
+  return apiRequest<CaseRow[]>(`/cases?${query}`);
+};
+
+export const listOwnCases = () => apiRequest<CustomerCase[]>(`/cases?limit=${EVERY}`);
+
+export const getCase = (id: string) => apiRequest<CaseDetail>(`/cases/${encodeURIComponent(id)}`);
+export const getOwnCase = (id: string) => apiRequest<CustomerCase>(`/cases/${encodeURIComponent(id)}`);
+
+export const getCounts = () => apiRequest<Partial<Record<CaseStatus, number>>>('/cases/counts');
+
+/** replyText null sends the agent's draft as it is; an edited reply is self-checked again before it goes out. */
+export const approveCase = (id: string, replyText: string | null) =>
+  apiRequest<CaseDetail>(`/cases/${encodeURIComponent(id)}/approve`, { method: 'POST', body: { reply_text: replyText } });
+
+export const rejectCase = (id: string) =>
+  apiRequest<CaseDetail>(`/cases/${encodeURIComponent(id)}/reject`, { method: 'POST', body: {} });
+
+export const flagCase = (id: string, note: string) =>
+  apiRequest<CaseDetail>(`/cases/${encodeURIComponent(id)}/flag`, { method: 'POST', body: { note } });
+
+/** Staff intake for any customer (call-centre note, live-round row). */
+export const submitComplaint = (complaint: IntakeComplaint) =>
+  apiRequest<{ complaint_id: string }>('/complaints', { method: 'POST', body: complaint });
+
+/** A signed-in customer files under their own ID, from the app. */
+export const fileOwnComplaint = (text: string, subject: string) =>
+  apiRequest<{ complaint_id: string }>('/me/complaints', { method: 'POST', body: { text, subject } });
+
+/** The answer to the bank's follow-up question; the worker reprocesses the case. */
+export const sendCustomerReply = (id: string, text: string) =>
+  apiRequest<{ message_id: string }>(`/cases/${encodeURIComponent(id)}/messages`, { method: 'POST', body: { text } });

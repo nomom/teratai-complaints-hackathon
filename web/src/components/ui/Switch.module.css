@@ -1,0 +1,54 @@
+.row {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.track {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  flex: none;
+  border: 0;
+  border-radius: 999px;
+  background: var(--toggle-off);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.track[data-state='checked'] {
+  background: var(--primary);
+}
+
+.track:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.thumb {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--on-primary);
+  box-shadow: 0 0 0 1px var(--border);
+  transform: translateX(2px);
+  transition: transform 0.15s ease;
+}
+
+.thumb[data-state='checked'] {
+  transform: translateX(18px);
+}
+
+.label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.label svg {
+  width: 15px;
+  height: 15px;
+}

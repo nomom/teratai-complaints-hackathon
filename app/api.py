@@ -6,7 +6,8 @@ POST /complaints drops the complaint into inbox/; the worker (python -m app.work
 
 Access control (app/UserAccessControl): log in at POST /auth/login and send the token as a Bearer header.
 The case endpoints show each role only its own cases: officer HUMAN_APPROVAL, fraud FRAUD_TEAM, manager all,
-customer their own (and only the messages actually sent). Intake (POST /complaints and customer replies) stays open.
+customer their own (and only the messages actually sent). Intake (POST /complaints and customer replies) stays open;
+a signed-in customer files from the app with POST /me/complaints. The React app in web/ is the client.
 """
 import os
 from typing import Optional
@@ -69,24 +70,56 @@ def customer_reply(complaint_id: str, body: CustomerReplyIn):
     return {"message_id": submit_reply(complaint_id, body.text), "status": "QUEUED"}
 
 
+class OwnComplaintIn(BaseModel):   # a signed-in customer files under their own ID, from the app
+    text: str
+    subject: str = ""
+
+
+# The bank's data ends on 30 Sep 2026, so complaints filed from the customer app are received then (as in the live round)
+APP_RECEIVED_AT = "2026-09-30 18:00"
+
+
+@app.post("/me/complaints", status_code=202)
+def file_own_complaint(body: OwnComplaintIn, user: Account = Depends(require_roles(roles.CUSTOMER))):
+    if not body.text.strip():
+        raise HTTPException(422, "tell us what happened")
+    cid = submit({"customer_id": user.username, "channel": "App chat", "received_at": APP_RECEIVED_AT,
+                  "subject": body.subject.strip(), "text": body.text})
+    return {"complaint_id": cid, "status": "QUEUED"}
+
+
 def _visible_case(complaint_id: str, user: Account) -> dict:
     c = store.get_case(complaint_id)
     if not c:
         raise HTTPException(404, "not processed yet (is the worker running?)")
     if not roles.can_view(user, c):
-        raise HTTPException(403, {"code": "FORBIDDEN", "message": "This case is not in your queue."})
+        detail = {"code": "FORBIDDEN", "message": "This case is not in your queue."}
+        if user.role in roles.STAFF_ROLES:     # staff may know where it went (e.g. after taking in a complaint)
+            detail["route"] = c["route"] or c["status"]
+        raise HTTPException(403, detail)
     return c
 
 
-def _for(user: Account, case: dict) -> dict:
-    return roles.customer_view(case) if user.role == roles.CUSTOMER else case
+def _row(user: Account, case: dict, flagged: set) -> dict:
+    """A list row: the case's columns without the full record (GET /cases/{id} has it), plus whether it is flagged."""
+    if user.role == roles.CUSTOMER:
+        return roles.customer_view(case)
+    return {**{k: v for k, v in case.items() if k != "record"}, "flagged": case["complaint_id"] in flagged}
 
 
 @app.get("/cases")
 def cases(status: Optional[str] = None, limit: int = 200, user: Account = Depends(require_roles(*roles.ALL_ROLES))):
-    """`status` may list several, comma-separated: ?status=RESOLVED,ANSWERED"""
+    """`status` may list several, comma-separated: ?status=RESOLVED,ANSWERED. Rows are the case's columns, newest
+    first, without the full record."""
     rows = store.list_cases(status.split(",") if status else None, limit, **roles.case_filter(user))
-    return [_for(user, c) for c in rows]
+    flagged = store.flagged_ids() if user.role != roles.CUSTOMER else set()
+    return [_row(user, c, flagged) for c in rows]
+
+
+@app.get("/cases/counts")
+def case_counts(user: Account = Depends(require_roles(*roles.STAFF_ROLES))):
+    """Cases per status, only those the signed-in role may see."""
+    return store.counts(**roles.case_filter(user))
 
 
 @app.get("/cases/{complaint_id}")

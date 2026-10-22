@@ -1,0 +1,109 @@
+.list {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.card {
+  min-width: 0;                       /* a grid item may shrink below the one-line preview, which then truncates */
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--card-shadow);
+}
+
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  cursor: pointer;
+  list-style: none;
+  border-radius: var(--radius-card);
+}
+
+.summary::-webkit-details-marker {
+  display: none;
+}
+
+.summary:hover {
+  background: var(--primary-tint);
+}
+
+.summary:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.chevron {
+  width: 16px;
+  height: 16px;
+  color: var(--text-2);
+  transform: rotate(-90deg);
+  transition: transform 0.15s ease;
+}
+
+.card[open] .chevron {
+  transform: none;
+}
+
+.caseId {
+  font-weight: 600;
+}
+
+.preview {
+  flex: 1 1 200px;
+  min-width: 0;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.body {
+  padding: 0 var(--space-4) var(--space-4);
+}
+
+.meta {
+  color: var(--text-2);
+  font-size: var(--text-sm);
+  margin-bottom: var(--space-3);
+}
+
+.thread {
+  display: grid;
+  gap: var(--space-3);
+  list-style: none;
+  margin: 0 0 var(--space-4);
+  padding: 0;
+}
+
+.message {
+  max-width: min(78%, 680px);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--elevated);
+}
+
+.mine {
+  justify-self: end;
+  background: var(--primary-tint);
+  border-color: var(--primary-border);
+}
+
+.who {
+  color: var(--text-2);
+  font-size: var(--text-xs);
+  margin-bottom: var(--space-1);
+}
+
+.text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.formCard {
+  max-width: 720px;
+  margin-bottom: var(--space-5);
+}

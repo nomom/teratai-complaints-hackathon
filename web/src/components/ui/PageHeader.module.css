@@ -1,0 +1,32 @@
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+.title {
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.subtitle {
+  color: var(--text-2);
+  font-size: var(--text-sm);
+  margin-top: var(--space-1);
+  max-width: 72ch;
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+@media (min-width: 720px) {
+  .title {
+    font-size: var(--text-display);
+  }
+}

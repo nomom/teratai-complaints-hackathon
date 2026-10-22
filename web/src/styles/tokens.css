@@ -1,0 +1,126 @@
+/* Design tokens: the Teratai Ops system (PersonC's ui_kit, with the contrast-checked --border-strong).
+   Dark is the default; [data-theme] on <html> switches. Components use these variables only, never hex. */
+
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0E0B1F;
+  --surface: #17142B;
+  --row-alt: #1A1730;
+  --elevated: #201C38;
+  --border: #2C2747;
+  --border-strong: #716B8C;
+  --sidebar: #0A0818;
+  --input-bg: #17142B;
+  --text: #F2F0F7;
+  --text-2: #A6A1BD;
+  --text-3: #6B6685;
+  --primary: #6D4AFF;
+  --primary-hover: #7E5FFF;
+  --primary-tint: rgba(109,74,255,0.12);
+  --primary-border: rgba(109,74,255,0.40);
+  --primary-ink: #C9BDFF;
+  --on-primary: #FFFFFF;
+  --link: #9C86FF;
+  --success: #2FB67C;
+  --success-ink: #4FD39A;
+  --success-tint: rgba(47,182,124,0.12);
+  --success-border: rgba(47,182,124,0.35);
+  --error: #E5484D;
+  --error-ink: #FF8589;
+  --error-tint: rgba(229,72,77,0.12);
+  --error-border: rgba(229,72,77,0.40);
+  --warning: #E8A23A;
+  --warning-ink: #F2B85E;
+  --warning-tint: rgba(232,162,58,0.12);
+  --warning-border: rgba(232,162,58,0.35);
+  --info: #4C8DF6;
+  --info-ink: #7EAEFF;
+  --info-tint: rgba(76,141,246,0.12);
+  --info-border: rgba(76,141,246,0.40);
+  --danger-solid: #CF3A3F;
+  --neutral-tint: rgba(255,255,255,0.04);
+  --toggle-off: #6B6685;
+  --card-shadow: none;
+  --elevated-shadow: 0 12px 32px rgba(0,0,0,0.45);
+  --grid: rgba(255,255,255,0.05);
+  --glow: #3B1E8F;
+  --glow-opacity: 0.22;
+  --rim: rgba(232,196,138,0.10);
+  --orb-hi: rgba(255,255,255,0.22);
+  --orb-mid: rgba(109,74,255,0.35);
+  --orb-lo: rgba(59,30,143,0.55);
+  --orb-edge: rgba(14,11,31,0.90);
+  --orb-shadow: rgba(59,30,143,0.45);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #F7F6FB;
+  --surface: #FFFFFF;
+  --row-alt: #FAF9FD;
+  --elevated: #FFFFFF;
+  --border: #E4E1EE;
+  --border-strong: #87819F;
+  --sidebar: #EFEDF6;
+  --input-bg: #FFFFFF;
+  --text: #17142B;
+  --text-2: #5E5878;
+  --text-3: #A6A1BD;
+  --primary: #5B36F2;
+  --primary-hover: #4A28D9;
+  --primary-tint: rgba(91,54,242,0.08);
+  --primary-border: rgba(91,54,242,0.35);
+  --primary-ink: #4A28D9;
+  --on-primary: #FFFFFF;
+  --link: #5B36F2;
+  --success: #1E8E5A;
+  --success-ink: #146B43;
+  --success-tint: rgba(30,142,90,0.10);
+  --success-border: rgba(30,142,90,0.35);
+  --error: #C9302C;
+  --error-ink: #B42824;
+  --error-tint: rgba(201,48,44,0.08);
+  --error-border: rgba(201,48,44,0.35);
+  --warning: #B26A00;
+  --warning-ink: #8A5200;
+  --warning-tint: rgba(178,106,0,0.10);
+  --warning-border: rgba(178,106,0,0.35);
+  --info: #2F6FD6;
+  --info-ink: #2459B3;
+  --info-tint: rgba(47,111,214,0.08);
+  --info-border: rgba(47,111,214,0.35);
+  --danger-solid: #C9302C;
+  --neutral-tint: rgba(23,20,43,0.04);
+  --toggle-off: #87819F;
+  --card-shadow: 0 1px 2px rgba(20,16,50,0.04), 0 4px 12px rgba(20,16,50,0.05);
+  --elevated-shadow: 0 8px 24px rgba(20,16,50,0.08);
+  --grid: rgba(23,20,43,0.07);
+  --glow: #E6DEFF;
+  --glow-opacity: 0.55;
+  --rim: rgba(245,230,200,0.35);
+  --orb-hi: rgba(255,255,255,0.95);
+  --orb-mid: rgba(193,178,255,0.60);
+  --orb-lo: rgba(140,116,240,0.45);
+  --orb-edge: rgba(230,222,255,0.90);
+  --orb-shadow: rgba(150,130,240,0.35);
+}
+
+:root {
+  --radius: 8px;
+  --radius-card: 12px;
+  --font: 'Inter', 'IBM Plex Sans', system-ui, sans-serif;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-display: 32px;
+}
