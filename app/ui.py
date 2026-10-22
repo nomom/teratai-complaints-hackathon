@@ -93,7 +93,7 @@ else:
     rows = store.list_cases()
     st.header(f"All cases ({len(rows)})")
     st.dataframe([{k: r[k] for k in ("complaint_id", "status", "category", "outcome", "refund_amount_myr", "priority",
-                                     "route", "check_ok", "updated_at")} for r in rows], use_container_width=True)
+                                     "route", "check_ok", "updated_at")} for r in rows], width="stretch")
     pick = st.text_input("Open case")
     if pick:
         case = store.get_case(pick.strip())
