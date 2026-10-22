@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import threading
+from contextlib import contextmanager
 
 PROVIDER = os.environ.get("LLM_PROVIDER", "").lower()
 DEFAULT_MODEL = {"anthropic": "claude-opus-5-5"}
@@ -67,7 +68,20 @@ class Usage:
 
 
 def enabled() -> bool:
-    return PROVIDER in ("anthropic", "openai")
+    return PROVIDER in ("anthropic", "openai") and not getattr(_thread, "off", False)
+
+
+_thread = threading.local()
+
+
+@contextmanager
+def off():
+    """Rules and templates only on this thread, whatever LLM_PROVIDER says (the worker's backfill of past complaints)."""
+    _thread.off = True
+    try:
+        yield
+    finally:
+        _thread.off = False
 
 
 def _get_client():

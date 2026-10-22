@@ -113,6 +113,11 @@ def flagged_ids():
             "SELECT DISTINCT complaint_id FROM audit WHERE action = 'flagged_for_review'")}
 
 
+def case_ids():
+    with connect() as con:
+        return {r["complaint_id"] for r in con.execute("SELECT complaint_id FROM cases")}
+
+
 def get_case(complaint_id):
     with connect() as con:
         r = con.execute("SELECT * FROM cases WHERE complaint_id = ?", (complaint_id,)).fetchone()

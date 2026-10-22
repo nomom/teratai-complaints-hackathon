@@ -142,6 +142,15 @@ def my_cases(status=None, limit=200):
     return store.list_cases(status, limit, **roles.case_filter(user))
 
 
+def queue_header(title, rows, statuses):
+    """The header counts every case in these statuses; the list itself stops at the most recent few hundred."""
+    counts = store.counts(**roles.case_filter(user))
+    total = sum(counts.get(s, 0) for s in statuses)
+    st.header(f"{title} ({total})")
+    if len(rows) < total:
+        st.caption(f"Showing the {len(rows)} most recently updated. All cases lists every one.")
+
+
 def money(v):
     return "-" if v is None else f"RM{v:.2f}"
 
@@ -355,7 +364,7 @@ elif page == "My cases":
 
 elif page == "Awaiting customer":
     rows = my_cases("AWAITING_CUSTOMER")
-    st.header(f"Awaiting customer ({len(rows)})")
+    queue_header("Awaiting customer", rows, ["AWAITING_CUSTOMER"])
     st.caption("Open cases with no decision yet: we asked these customers for more details. "
                "Their reply continues the case automatically.")
     for row in rows:
@@ -366,13 +375,13 @@ elif page == "Awaiting customer":
 elif page in ("Approval queue", "Fraud queue"):
     status = "PENDING_APPROVAL" if page == "Approval queue" else "FRAUD_QUEUE"
     rows = my_cases(status)
-    st.header(f"{page} ({len(rows)})")
+    queue_header(page, rows, [status])
     st.caption("Each case says why it needs you. Open one to review the decision and the reply.")
     case_list(rows, actions=True)
 
 elif page == "Resolved automatically":
     rows = my_cases(AUTO_SENT)
-    st.header(f"Resolved automatically ({len(rows)})")
+    queue_header("Resolved automatically", rows, AUTO_SENT)
     st.caption("Replies that went out with no person involved: refunds within the limit, service complaints and "
                "off-topic messages. Spot-check them; flag anything that looks wrong for follow-up.")
     flagged = store.flagged_ids()
@@ -385,7 +394,7 @@ else:
                "Flagged for review": "flagged"}
     pick = st.selectbox("Show", list(choices))
     want = choices[pick]
-    rows = my_cases(None if want == "flagged" else want, limit=1000)
+    rows = my_cases(None if want == "flagged" else want, limit=100_000)
     if want == "flagged":
         flagged = store.flagged_ids()
         rows = [r for r in rows if r["complaint_id"] in flagged]

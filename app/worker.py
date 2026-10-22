@@ -5,17 +5,27 @@
 A complaint is a JSON file: {"customer_id", "received_at", "channel", "text", ["subject"], ["complaint_id"]}.
 The API and the UI both drop files here, so there is one intake path. Done files move to inbox/processed/,
 broken ones to inbox/failed/ with the error alongside.
+
+On start it also backfills: every complaint in data/complaints.csv that isn't in the case store yet is processed in
+the background, so customers see their history and the queues are full without a separate batch run.
 """
 import datetime as dt
 import json
+import os
+import threading
 import time
 import traceback
 import uuid
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 INBOX = ROOT / "inbox"
 POLL_SECONDS = 1.0
+# The backfill uses rules and templates only: 2,500 past complaints through the LLM would be slow and costly.
+# BACKFILL_LLM=1 sends them through the LLM too, when it is on. Live complaints always follow LLM_PROVIDER.
+BACKFILL_LLM = os.environ.get("BACKFILL_LLM", "") == "1"
 
 
 def submit(complaint: dict) -> str:
@@ -59,6 +69,41 @@ def handle(path: Path):
     print(f"{c['complaint_id']}: {rec.category} {what} ({rec.status})", flush=True)
 
 
+def backfill():
+    """Process the complaints in data/complaints.csv that the case store has never seen. A stored case is never
+    reprocessed, so an officer's action or a customer's follow-up is kept, and a restart only picks up what is new."""
+    from agent import llm, tools
+    from agent.pipeline import process_complaint
+    from app import store
+
+    done = store.case_ids()
+    known = list(tools.get_db().complaints.items())       # a snapshot: live complaints get registered meanwhile
+    todo = sorted((c for cid, c in known if cid not in done),
+                  key=lambda c: c["received_at"], reverse=True)              # most recent first
+    if not todo:
+        return
+    how = "with the LLM" if BACKFILL_LLM and llm.enabled() else "rules only"
+    print(f"backfill: {len(todo)} complaints from data/complaints.csv not in the case store, "
+          f"processing in the background ({how})", flush=True)
+    t0, saved = time.time(), []
+
+    def one(c):
+        try:
+            with nullcontext() if BACKFILL_LLM else llm.off():
+                rec = process_complaint(c)
+            if store.get_case(c["complaint_id"]) is None:         # the inbox may have taken it meanwhile
+                store.save_case(rec)
+                saved.append(c["complaint_id"])
+                if len(saved) % 250 == 0:
+                    print(f"backfill: {len(saved)}/{len(todo)}", flush=True)
+        except Exception as e:  # noqa: BLE001 -- one bad complaint must not stop the rest
+            print(f"backfill FAILED {c['complaint_id']}: {type(e).__name__}: {e}", flush=True)
+
+    with ThreadPoolExecutor(int(os.environ.get("BATCH_WORKERS", 8))) as pool:
+        list(pool.map(one, todo))
+    print(f"backfill done: {len(saved)} cases in {time.time() - t0:.0f}s", flush=True)
+
+
 def main():
     from agent import tools
 
@@ -66,6 +111,7 @@ def main():
         (INBOX / d).mkdir(parents=True, exist_ok=True)
     print("loading data...", flush=True)
     tools.get_db()
+    threading.Thread(target=backfill, name="backfill", daemon=True).start()
     print(f"watching {INBOX} (Ctrl+C to stop)", flush=True)
     while True:
         for path in sorted(INBOX.glob("*.json")):

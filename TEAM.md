@@ -47,6 +47,8 @@ uv run python -m streamlit run app/ui.py             # terminal 2: dashboard, ht
 uv run python -m uvicorn app.api:app --port 8000     # optional, terminal 3: API, docs at http://localhost:8000/docs
 ```
 
+On start the worker also loads every complaint in `data/complaints.csv` that isn't in the case store yet (about 15 s for all 2,500, in the background, rules only; `BACKFILL_LLM=1` uses the LLM too). Cases already stored are never reprocessed, so a restart keeps officers' actions. To start over, delete `runtime/cases.db`.
+
 Both the dashboard and the API need a login (`app/UserAccessControl`). Staff: `officer1` (approval queue), `fraud1` (fraud queue), `manager1` (everything), password `1234`. Customers sign up with their customer ID (e.g. `CUS-00150`), then file complaints and follow their own cases. Sign-up writes the password hash into `data/customers.csv`: don't commit that change.
 
 Prefer an activated shell? `.\.venv\Scripts\Activate.ps1` (Windows) or `source .venv/bin/activate` (macOS/Linux), then drop the `uv run` prefix.
