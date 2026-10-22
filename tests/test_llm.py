@@ -199,6 +199,13 @@ class Intents(LLMTestCase):
         self.assertEqual((rec.decision.outcome, rec.decision.route), ("INVESTIGATE", "FRAUD_TEAM"))
         self.assertIn("VAGUE_FRAUD_REPORT", rec.decision.flags)
 
+    def test_scam_wording_overrides_llm_category(self):
+        self.use(FakeOpenAI(extraction(category="FAILED_TRANSFER", amount=4042.06, counterparty="Muthu")))
+        ex = extract.extract(self.complaint("Saya melabur RM4,042.06 dalam skim pelaburan dari kumpulan chat dan "
+                                            "pindahkan kepada Muthu hari Ahad lepas."), llm.Usage())
+        self.assertEqual((ex.category, ex.amount, ex.counterparty), ("SCAM_TRANSFER", 4042.06, "Muthu"))
+        self.assertIn("overridden", ex.source)
+
     def test_follow_ups_used_up_goes_to_officer(self):
         self.use(FakeOpenAI(extraction(intent="NEEDS_DETAILS", missing_info=["what_happened"])))
         rec = process_complaint(self.complaint("still a problem", cid="TEST-MAX", follow_ups=MAX_FOLLOW_UPS))

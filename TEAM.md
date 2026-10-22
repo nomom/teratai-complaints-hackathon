@@ -34,7 +34,7 @@ One [uv](https://docs.astral.sh/uv/) project for the whole repo: `pyproject.toml
 ```powershell
 uv sync                                              # creates/updates .venv (git-ignored) from uv.lock
 uv run python -m unittest discover tests             # tests
-uv run python -m scripts.run_batch --split train     # train run + score + per-category table; ends with FINAL SCORE 92.16
+uv run python -m scripts.run_batch --split train     # train run + score + per-category table; ends with FINAL SCORE 98.89
 ```
 
 `uv run` uses the root `.venv` without activating it. After a `git pull` that changes `uv.lock`, run `uv sync` again. To add a package: `uv add <package>`, then commit `pyproject.toml` and `uv.lock` together.
@@ -73,25 +73,25 @@ If the LLM call fails (bad key, missing model), the pipeline falls back to the r
 - **A typed complaint finds no transaction:** keep the received time near the transaction date (the form defaults to 2026-09-30). Test first with the examples in [END_GOAL.md](END_GOAL.md).
 - **Code changes don't show up:** restart the worker after pulling.
 
-## Where we start (offline, no LLM): train score 92.16
+## Where we are (offline, no LLM): train score 98.89, zero critical errors
+
+Started at 92.16. B's rule fixes (ATM and scam phrasings, language detection) took category and reply language to 100%.
 
 ```
 true category           n  category     txn  outcome  refund   prio   lang
-ATM_NOT_DISPENSED     213       67%     67%      67%     67%    67%    93%
-DUPLICATE_CHARGE      249      100%     96%      96%     96%   100%    97%
-FAILED_TRANSFER       277      100%     96%      96%     96%   100%    97%
-FEE_DISPUTE           270      100%    100%     100%    100%   100%    93%
-SCAM_TRANSFER         213       91%    100%      91%    100%    91%    97%
-SERVICE_QUALITY       244      100%    100%     100%    100%   100%    87%
-UNAUTHORISED_CARD     284      100%     99%      99%     99%   100%    98%
+ATM_NOT_DISPENSED     213      100%    100%     100%    100%   100%   100%
+DUPLICATE_CHARGE      249      100%     96%      96%     96%   100%   100%
+FAILED_TRANSFER       277      100%     96%      96%     96%   100%   100%
+FEE_DISPUTE           270      100%    100%     100%    100%   100%   100%
+SCAM_TRANSFER         213      100%    100%     100%    100%   100%   100%
+SERVICE_QUALITY       244      100%    100%     100%    100%   100%   100%
+UNAUTHORISED_CARD     284      100%     99%      99%     99%   100%   100%
 ```
 
-Biggest gaps, in points:
+The remaining gap is all transaction matching:
 
-1. **B:** 70 ATM complaints classed as SERVICE_QUALITY ("the machine did not dispense", "wang tidak keluar"). The LLM extractor should fix this.
-2. **B:** 20 scams classed as FAILED_TRANSFER ("deceived by an online acquaintance", "skim pelaburan"). These are **critical errors** (missed fraud, each costs 2× its share of the score).
-3. **B:** about 90 reply-language misses (EN/MS on app chat, email and branch forms). Mixed-language detection needs work.
-4. **A:** 23 `NO_MATCH` flags and about 4% wrong transactions on duplicates and failed transfers. Read `submissions/our-team/predictions_train_details.csv`.
+1. **A:** 23 `NO_MATCH` flags and about 4% wrong transactions on duplicates and failed transfers. Read `submissions/our-team/predictions_train_details.csv`.
+2. **B:** the rules are tuned on training phrasings. The live round uses fresh wording, which is where the LLM has to earn its place.
 
 ## To do, by person
 
@@ -109,11 +109,12 @@ Goal: txn, outcome and refund near 100% with `run_batch --split train --oracle-c
 ### B: LLM layer
 Goal: category and language near 100%; replies a bank would send; a self-check judges can't sneak past.
 
-- [ ] **Scams classed as FAILED_TRANSFER (20, critical errors).** Add rule keywords now ("deceived", "acquaintance", "skim pelaburan", "melabur"), then confirm the LLM gets them
-- [ ] ATM complaints classed as SERVICE_QUALITY (70): "machine did not dispense", "wang tidak keluar"
-- [ ] Reply language (~90 misses): improve `detect_language()` for EN/MS/MIXED, or let the LLM decide. The preferred-language rule stays in code
+- [x] **Scams classed as FAILED_TRANSFER (20, critical errors):** rule keywords added. When the LLM is on, scam wording found by the rules overrides an LLM category (a missed scam is worse than an extra investigation)
+- [x] ATM complaints classed as SERVICE_QUALITY (70): "withdrew", "mengeluarkan", "did not dispense", "duit tak keluar"
+- [x] Reply language (91 misses → 0): bigger EN/MS word lists; English counts only in lowercase, so names like "Shah Alam Branch" don't make Malay text MIXED. Tests in `tests/test_extract.py`
 - [ ] Turn the LLM on (`LLM_PROVIDER=anthropic`), run 100–200 train complaints, compare against the rules, record tokens and cost per complaint
-- [ ] Few-shot examples in the extraction prompt, picked from the confused categories
+- [x] Few-shot examples in the extraction prompt, picked from the confused categories (plus one vague and one off-topic message)
+- [ ] Decide, from measurement, whether the reply language comes from the LLM or from `detect_language()` (100% on train)
 - [ ] Better replies per category in EN and MS: tone, SLA timeline, short (judges read 10)
 - [ ] Harden `checks.py`: wrong refund amount, refund promised on a decline, wrong language. Try to break it like a judge would
 - [x] LLM reliability: timeouts, SDK retries, a per-complaint call/token budget, and every failure recorded by kind (`timeout`, `refusal`, `bad_json`, ...) with a fallback to rules/templates. Tests in `tests/test_llm.py` use fake clients (no key, no cost)
