@@ -24,6 +24,8 @@ FLAG_WORDS = {
     "NO_MATCH": "Couldn't identify which transaction the customer means",
     "AMBIGUOUS_MATCH": "Two transactions fit equally well: confirm which one the customer means",
     "CHECK_FAILED": "The drafted reply failed the self-check: fix it before sending",
+    "DRAFT_REJECTED": "The agent's reply failed the self-check twice, so a standard reply is in the box: "
+                      "review it before sending (the rejected drafts are under \"How the agent decided\")",
     "DETAILS_STILL_MISSING": "Still too vague after 2 follow-up questions",
     "VAGUE_FRAUD_REPORT": "Possible fraud reported without details: contact the customer",
 }

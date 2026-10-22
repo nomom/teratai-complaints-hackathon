@@ -36,6 +36,7 @@ Every case page shows:
 | Any decline, or a refund over RM500 | HUMAN_APPROVAL | Waits in the approval queue for an officer |
 | Fraud: a scam, or a card payment approved with OTP or chip and PIN | FRAUD_TEAM | Waits in the fraud queue |
 | Anything flagged (no match, ambiguous match, failed self-check) | HUMAN_APPROVAL | Waits for an officer, even if it would otherwise auto-resolve |
+| The agent's reply fails the self-check, and fails again after one rewrite | HUMAN_APPROVAL | Waits for an officer with a standard reply in the box and the rejected drafts on record ("redraft once, then flag it for a human") |
 | A complaint too general to act on ("my account has a problem") | none yet | The agent asks the customer for details. The case stays open with **no decision** (`AWAITING_CUSTOMER`) until they reply, then it is decided like any other. After 2 rounds without enough detail, an officer takes over. Possible fraud never waits |
 | Not a banking complaint ("what's the weather?") | AUTO_RESOLVE | The agent answers politely that this channel handles account complaints (`ANSWERED`); no officer needed |
 
