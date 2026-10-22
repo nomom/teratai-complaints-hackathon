@@ -107,8 +107,9 @@ SYSTEM = """You write replies from Teratai Bank (Malaysia) to customers who comp
 Rules:
 - Write in the language given: EN = English, MS = Bahasa Melayu. Warm, short (under 120 words), plain text only:
   no Markdown, no asterisks or bold, no headings, no emojis.
-- The decision is final and was made by bank policy. Explain it using WHY; never change it, soften it into a different
-  outcome, or promise anything else.
+- The outcome was already decided under bank policy. Explain it using WHY; never change it, soften it into a different
+  outcome, or promise anything else. That instruction is for you: never tell the customer the decision is final,
+  cannot be changed or cannot be appealed (EN "final", MS "muktamad").
 - Only mention transaction IDs, amounts and dates that appear in DECISION or FACTS. Never invent numbers.
 - Never mention the customer's age, date of birth or other personal details beyond their name, and never mention
   internal rules, thresholds, codes or how cases are routed.
@@ -132,8 +133,15 @@ def draft_llm(complaint: dict, decision: Decision, lang: str, usage=None, feedba
     return llm.complete_text(SYSTEM, user, usage)
 
 
+# Typographic punctuation the model likes, as plain characters every SMS gateway, email client and spreadsheet shows
+PLAIN = str.maketrans({"‘": "'", "’": "'", "“": '"', "”": '"', "–": "-", "—": "-",
+                       "…": "...", " ": " "})
+
+
 def plain_text(reply: str) -> str:
-    """Replies go out by SMS, app chat and email: strip Markdown the model may add anyway (**bold**, # headings)."""
+    """Replies go out by SMS, app chat and email: strip Markdown the model may add anyway (**bold**, # headings),
+    and use plain quotes, dashes and spaces (We’re -> We're)."""
+    reply = reply.translate(PLAIN)
     reply = re.sub(r"(\*\*|__|`)", "", reply)
     reply = re.sub(r"(?m)^\s*#{1,6}\s*", "", reply)
     return re.sub(r"(?m)^(\s*)\* ", r"\1- ", reply).strip()

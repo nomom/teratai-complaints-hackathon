@@ -334,6 +334,18 @@ class Replies(LLMTestCase):
         self.assertEqual(reply.plain_text("## Update\nRefund of **RM1,500.00** is on its way.\n* item"),
                          "Update\nRefund of RM1,500.00 is on its way.\n- item")
 
+    def test_typographic_punctuation_becomes_plain(self):
+        self.assertEqual(reply.plain_text("We’re sorry — “session expired”… RM 10.00"),
+                         "We're sorry - \"session expired\"... RM 10.00")
+
+    def test_llm_reply_reaches_the_record_in_plain_text(self):
+        self.use(FakeOpenAI(extraction(intent="OUT_OF_SCOPE"),
+                            reply="Thanks! We’re the complaints channel for your Teratai Bank accounts. If you "
+                                  "have a problem with your account, please tell us.\n\nTeratai Bank Customer Care"))
+        rec = process_complaint(self.complaint("What's the weather tomorrow?", cid="TEST-PLAIN"))
+        self.assertIn("We're the complaints channel", rec.reply_text)
+        self.assertTrue(rec.reply_text.isascii())
+
 
 class PromptInjection(LLMTestCase):
     """A complaint that tries to instruct the model. Worst case assumed: the LLM obeys the attacker completely.
