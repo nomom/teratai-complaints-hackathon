@@ -76,10 +76,13 @@ def log(complaint_id, actor, action, detail=""):
         audit(con, complaint_id, actor, action, detail)
 
 
-def list_cases(status=None, limit=200):
+def list_cases(status=None, limit=200, route=None, customer_id=None):
+    """Newest first. Each filter given narrows the list (access control passes route or customer_id per role)."""
+    filters = {k: v for k, v in (("status", status), ("route", route), ("customer_id", customer_id)) if v}
+    where = " AND ".join(f"{k} = ?" for k in filters)
     with connect() as con:
-        q = "SELECT * FROM cases" + (" WHERE status = ?" if status else "") + " ORDER BY updated_at DESC LIMIT ?"
-        return [dict(r) for r in con.execute(q, (status, limit) if status else (limit,))]
+        q = "SELECT * FROM cases" + (f" WHERE {where}" if where else "") + " ORDER BY updated_at DESC LIMIT ?"
+        return [dict(r) for r in con.execute(q, (*filters.values(), limit))]
 
 
 def get_case(complaint_id):

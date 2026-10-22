@@ -1,0 +1,4 @@
+username,full_name,role,approval_limit_myr,password
+officer1,Aisyah binti Rahman,officer,5000,pbkdf2_sha256$200000$R/oWiCaiEKlY5aZQYleijg==$qR7GmyreWFoJiaRo6oZ9wftIIB1az+rqCs0npEU84wY=
+fraud1,Daniel Lim Wei Jie,fraud,5000,pbkdf2_sha256$200000$PqTZpT5wTsHAerRRRY9MZQ==$2yTfyUqRvy8WvC5KORneCdPqrkZnlD7QpJP/mnXU6SU=
+manager1,Priya Nair,manager,,pbkdf2_sha256$200000$7z6WZ/Yh7Ldh+EATtkxeXA==$CCRRqP3aKO+qLdD0jrTDzEHvHQQB3ZLyodaJ30RGrG8=
