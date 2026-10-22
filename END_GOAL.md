@@ -99,7 +99,7 @@ Why: the ATM journal shows RM1,500 requested and RM950 dispensed. The refund is 
 - Produced by the same workflow as the app (`python -m scripts.run_batch --split test --team <team-name>`), never by hand
 - Submitted as a pull request **from our fork** (`nomom/teratai-complaints-hackathon`) to the original repo (`DM-Data-Science/teratai-complaints-hackathon`), titled `Submission: <team-name>`, **before 15:00 on Day 2**. The PR only needs the predictions file; our code stays in the fork
 - Always the agent's own output, never officer-corrected, even if we build the ops platform below
-- Training score: **99.91** today with the LLM off (it started at 92.16). Target: keep it there, and holding up on fresh wording in the live round, with zero critical errors (no wrongful refunds, no missed fraud)
+- Training score: **99.96** today with the LLM off (it started at 92.16). Target: keep it there, and holding up on fresh wording in the live round, with zero critical errors (no wrongful refunds, no missed fraud)
 
 ---
 

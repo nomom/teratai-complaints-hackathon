@@ -34,7 +34,7 @@ One [uv](https://docs.astral.sh/uv/) project for the whole repo: `pyproject.toml
 ```powershell
 uv sync                                              # creates/updates .venv (git-ignored) from uv.lock
 uv run python -m unittest discover tests             # tests
-uv run python -m scripts.run_batch --split train     # train run + score + per-category table; ends with FINAL SCORE 99.91 (LLM off)
+uv run python -m scripts.run_batch --split train     # train run + score + per-category table; ends with FINAL SCORE 99.96 (LLM off)
 ```
 
 `uv run` uses the root `.venv` without activating it. After a `git pull` that changes `uv.lock`, run `uv sync` again. To add a package: `uv add <package>`, then commit `pyproject.toml` and `uv.lock` together.
@@ -79,9 +79,9 @@ If the LLM call fails (bad key, missing model), the pipeline falls back to the r
 - **A typed complaint finds no transaction:** keep the received time near the transaction date (the form defaults to 2026-09-30). Test first with the examples in [END_GOAL.md](END_GOAL.md).
 - **Code changes don't show up:** restart the worker after pulling.
 
-## Where we are (offline, no LLM): train score 99.91, zero critical errors
+## Where we are (offline, no LLM): train score 99.96, zero critical errors
 
-Started at 92.16. B's rule fixes (ATM and scam phrasings, language detection) took category and reply language to 100% (98.89); A's matching (hedged amounts up to 20% off, town names aren't merchant names) cleared all 23 `NO_MATCH` (99.91).
+Started at 92.16. B's rule fixes (ATM and scam phrasings, language detection) took category and reply language to 100% (98.89); A's matching (hedged amounts up to 20% off, town names aren't merchant names) cleared all 23 `NO_MATCH` (99.91). Fee complaints naming a month match that month's charge even when they quote the fee they expected (99.96).
 
 ```
 true category           n  category     txn  outcome  refund   prio   lang
@@ -94,9 +94,9 @@ SERVICE_QUALITY       244      100%    100%     100%    100%   100%   100%
 UNAUTHORISED_CARD     284      100%    100%     100%    100%   100%   100%
 ```
 
-Two training complaints are still wrong, both transaction matching (rounded to 100% above):
+One training complaint is still wrong (rounded to 100% above):
 
-1. **A:** CMP-01550 (duplicate charge, wrong pair of twins) and CMP-02357 (fee: "I thought the fee is only RM10" quotes the expected fee, not the charged one). Read `submissions/our-team/predictions_train_details.csv`.
+1. **A:** CMP-01550 (duplicate charge, wrong pair of twins). Read `submissions/our-team/predictions_train_details.csv`.
 2. **B:** the rules are tuned on training phrasings. The live round uses fresh wording, which is where the LLM has to earn its place.
 
 ## To do, by person
@@ -107,7 +107,8 @@ Tick items off in your PRs. Highest value first.
 Goal: txn, outcome and refund near 100% with `run_batch --split train --oracle-category`.
 
 - [x] Fix the 23 `NO_MATCH` cases: hedged amounts may be up to 20% off, town words aren't merchant names (0 `NO_MATCH` on train; 13 test complaints newly matched)
-- [ ] The last 2 wrong transactions on train: CMP-01550 (pick the right pair when several twins exist) and CMP-02357 (a fee complaint quoting the expected fee, not the charged one)
+- [x] *(done by B, please review)* Fee complaint quoting the expected fee (CMP-02357): when a month is named, it identifies the charge and the amount no longer rules charges out; if month and amount point to different charges, `AMBIGUOUS_MATCH` sends it to an officer. 9 edge-case tests in `tests/test_decision.py` (`FeeByMonth`)
+- [ ] The last wrong transaction on train: CMP-01550 (pick the right pair when several twins exist)
 - [x] *(done by B, please review)* A candidate needs at least one real clue (amount, card, date, name, fee, twin), else `NO_MATCH`. Before, "My DuitNow transfer failed, please help" with no amount or date matched the customer's only transfer and auto-refunded it: no date phrase resolves to the whole window, which had counted as a date clue. No change on train or test predictions; regression test in `tests/test_core.py`
 - [ ] Grow `dates.py` with the phrases you find ("minggu lepas", "awal bulan", "last weekend", ...)
 - [ ] Check `fee_due()` edge cases: card opened 29 Feb, customer turning 60 the month of the fee, a fee with no matching product
@@ -119,7 +120,8 @@ Goal: category and language near 100%; replies a bank would send; a self-check j
 - [x] **Scams classed as FAILED_TRANSFER (20, critical errors):** rule keywords added. When the LLM is on, only strong scam phrases ("safe account", "skim pelaburan", "online acquaintance"...) override its category; everyday words like "parcel" or "police" never do. Keywords match whole words only ("invest" no longer matches "investigate")
 - [x] ATM complaints classed as SERVICE_QUALITY (70): "withdrew", "mengeluarkan", "did not dispense", "duit tak keluar"
 - [x] Reply language (91 misses → 0): bigger EN/MS word lists; English counts only in lowercase, so names like "Shah Alam Branch" don't make Malay text MIXED. Tests in `tests/test_extract.py`
-- [x] LLM measured (OpenAI `gpt-5.6-luna`). 200 train complaints: **99.25 with the LLM, 99.25 rules only**, zero critical errors, no LLM failures. 14 newly written live-round-style complaints: **LLM 14/14, rules 4/14** (rules miss ATM/fraud/fee without keywords, vague and off-topic messages). Per complaint: 2 calls, ~2,100 input + ~200 output tokens, ~4.5 s (0.5 s each with 8 workers)
+- [x] LLM measured (OpenAI `gpt-5.6-luna`), see **[MODEL_EVAL.md](MODEL_EVAL.md)**: 200 train complaints **100.00**, zero critical errors; 14 newly written live-round-style complaints **14/14** (rules alone 4/14); 3.8 s per complaint; **$0.0007 per complaint, $0.52 for the 750**
+- [ ] Try other models with the procedure in [MODEL_EVAL.md](MODEL_EVAL.md) (`scripts/eval_live.py`, `eval/live_round.csv`) and add a row to its table
 - [x] Few-shot examples in the extraction prompt, picked from the confused categories (plus one vague and one off-topic message)
 - [x] Language comes from `detect_language()` (the LLM called colloquial mixed text MS); hedge words before an amount ("dalam RM2200") are also read by code. Disagreements are logged in the case's `crosscheck`
 - [x] Cross-check (`agent/crosscheck.py`): when the LLM's category differs from a keyword the rules matched, one "second look" call picks between the two. It sees both options unlabelled, plus what each would match in the customer's transactions, and must quote the message. A quote that isn't in the message, low confidence, or leaving a fraud category without high confidence → `CROSSCHECK_UNRESOLVED`, the officer decides
