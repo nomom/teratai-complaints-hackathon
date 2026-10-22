@@ -3,6 +3,11 @@
 Covers (1) reliability: every failure kind falls back to rules/templates and is recorded, and (2) intents:
 vague complaints get a follow-up question, off-topic messages get a polite answer, fraud never waits.
 """
+import os
+
+os.environ["PYTHON_DOTENV_DISABLED"] = "1"   # tests never read .env ...
+os.environ["LLM_PROVIDER"] = ""              # ... and never call a real LLM (LLM tests swap in fake clients)
+
 import json
 import tempfile
 import unittest

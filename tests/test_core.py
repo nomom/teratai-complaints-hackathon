@@ -1,4 +1,9 @@
 """Fast offline tests for the deterministic parts. Run: python -m unittest discover tests"""
+import os
+
+os.environ["PYTHON_DOTENV_DISABLED"] = "1"   # tests never read .env ...
+os.environ["LLM_PROVIDER"] = ""              # ... and never call a real LLM (LLM tests swap in fake clients)
+
 import datetime as dt
 import unittest
 

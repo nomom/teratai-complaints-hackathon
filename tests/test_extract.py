@@ -2,6 +2,11 @@
 
 The rules are the offline path and the fallback whenever the LLM fails, so they must stay strong on their own.
 """
+import os
+
+os.environ["PYTHON_DOTENV_DISABLED"] = "1"   # tests never read .env ...
+os.environ["LLM_PROVIDER"] = ""              # ... and never call a real LLM (LLM tests swap in fake clients)
+
 import unittest
 
 from agent import extract, tools

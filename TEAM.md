@@ -34,7 +34,7 @@ One [uv](https://docs.astral.sh/uv/) project for the whole repo: `pyproject.toml
 ```powershell
 uv sync                                              # creates/updates .venv (git-ignored) from uv.lock
 uv run python -m unittest discover tests             # tests
-uv run python -m scripts.run_batch --split train     # train run + score + per-category table; ends with FINAL SCORE 98.89
+uv run python -m scripts.run_batch --split train     # train run + score + per-category table; ends with FINAL SCORE 98.89 (LLM off)
 ```
 
 `uv run` uses the root `.venv` without activating it. After a `git pull` that changes `uv.lock`, run `uv sync` again. To add a package: `uv add <package>`, then commit `pyproject.toml` and `uv.lock` together.
@@ -49,18 +49,20 @@ uv run python -m uvicorn app.api:app --port 8000     # optional, terminal 3: API
 
 Prefer an activated shell? `.\.venv\Scripts\Activate.ps1` (Windows) or `source .venv/bin/activate` (macOS/Linux), then drop the `uv run` prefix.
 
-**LLM on:** set these in the shell that runs the worker or batch, before starting it (see `.env.example`). With them unset, the rules and templates run and everything still works.
+**LLM on:** copy `.env.example` to `.env` at the repo root and fill in your provider and key. The worker, API, dashboard and batch load it on startup; restart them after editing it. `.env` is git-ignored, so never rename it or paste keys anywhere else. With no provider set, the rules and templates run and everything still works.
 
-```powershell
-# Anthropic (model defaults to claude-opus-5-5)
-$env:LLM_PROVIDER = "anthropic"
-$env:ANTHROPIC_API_KEY = "sk-ant-..."                # never commit this
+```ini
+# .env: Anthropic (model defaults to claude-opus-5-5)
+LLM_PROVIDER=anthropic
+ANTHROPIC_API_KEY=sk-ant-...
 
 # or OpenAI (LLM_MODEL is required)
-$env:LLM_PROVIDER = "openai"
-$env:OPENAI_API_KEY = "sk-..."                       # never commit this
-$env:LLM_MODEL = "<openai-model-id>"
+LLM_PROVIDER=openai
+OPENAI_API_KEY=sk-...
+LLM_MODEL=<openai-model-id>
 ```
+
+A variable set in the shell wins over `.env`, so `$env:LLM_PROVIDER = ""` turns the LLM off for one run (e.g. to reproduce the offline score). Tests never read `.env` and never call a real LLM.
 
 If the LLM call fails (bad key, missing model), the pipeline falls back to the rules and templates and records `rules (llm failed: …)` as the extraction source in the case trace, so check the trace if results look rule-based.
 
