@@ -5,3 +5,9 @@ __pycache__/
 venv/
 details.csv
 .DS_Store
+
+# app runtime
+runtime/
+inbox/
+submissions/*/predictions_train*.csv
+submissions/*/predictions_all*.csv

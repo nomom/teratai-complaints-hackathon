@@ -1,0 +1,6 @@
+# The agent core (agent/, scripts/, tests/) runs on the Python standard library alone.
+# These are only for the LLM layer and the app.
+anthropic          # agent/llm.py, when LLM_PROVIDER=anthropic
+fastapi            # app/api.py
+uvicorn            # serves app/api.py
+streamlit          # app/ui.py
