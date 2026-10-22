@@ -98,6 +98,15 @@ def detect_language(text: str) -> str:
     return "MS" if ms > en else "EN"
 
 
+def reply_language_why(complaint: dict, written: str) -> str:
+    """The reason for reply_language(), in words, for the officer and the audit."""
+    if complaint.get("channel") == "Call centre note":
+        return "call-centre note written by staff: customer's preferred language"
+    if written == "MIXED":
+        return "message mixes English and Malay: customer's preferred language"
+    return f"message written in {'English' if written == 'EN' else 'Malay'}: reply in the same language"
+
+
 def reply_language(complaint: dict, written: str) -> str:
     """Policy rule (code, not LLM): as written; mixed or call-centre note -> customer's preferred_language."""
     if written == "MIXED" or complaint.get("channel") == "Call centre note":

@@ -18,7 +18,13 @@ from types import SimpleNamespace as NS
 from agent import checks, extract, llm, reply, tools
 from agent.pipeline import MAX_FOLLOW_UPS, follow_up_complaint, process_complaint
 from agent.schemas import Decision
+from agent.summary import case_summary
 from app import store
+
+
+def stored(rec):
+    """A case record as the app stores and reads it back."""
+    return json.loads(json.dumps(rec.to_dict(), default=str))
 
 
 def extraction(**over):
@@ -161,6 +167,10 @@ class Intents(LLMTestCase):
         self.assertEqual(rec.check_problems, [])
         row = rec.prediction_row()                            # the leaderboard file still gets valid values
         self.assertEqual((row["outcome"], row["route"], row["refund_amount_myr"]), ("INFO_ONLY", "AUTO_RESOLVE", "0.00"))
+        s = case_summary(stored(rec))
+        self.assertEqual(s["why_here"], ["Waiting for the customer's reply to our follow-up question"])
+        self.assertEqual(s["story"], "Too general to act on. We asked the customer for what went wrong, the date and the amount.")
+        self.assertEqual((s["decision"], s["tone"]), ("No decision yet: waiting for the customer's details.", "info"))
 
     def test_follow_up_template_lists_what_is_missing(self):
         self.use(FakeOpenAI(extraction(intent="NEEDS_DETAILS", language="MS", missing_info=["date", "amount"]),
@@ -202,6 +212,11 @@ class Intents(LLMTestCase):
         self.assertEqual(rec.status, "ANSWERED")
         self.assertNotIn("RM12,345.67", rec.reply_text)       # self-check rejected it; template sent instead
         self.assertEqual(rec.check_problems, [])
+        reply_record = rec.decision.evidence["reply"]          # both rejected LLM drafts are kept for the audit
+        self.assertEqual((reply_record["source"], [r["source"] for r in reply_record["rejected_drafts"]]),
+                         ("template", ["llm", "llm"]))
+        self.assertIn("RM12,345.67", reply_record["rejected_drafts"][0]["text"])
+        self.assertEqual(case_summary(stored(rec))["why_here"], ["Answered automatically: not a banking complaint"])
 
     def test_vague_fraud_report_never_waits(self):
         self.use(FakeOpenAI(extraction(intent="NEEDS_DETAILS", category="SCAM_TRANSFER", missing_info=["amount"])))
@@ -385,6 +400,8 @@ class CrossCheck(LLMTestCase):
         self.assertEqual((rec.category, rec.decision.route), ("SERVICE_QUALITY", "HUMAN_APPROVAL"))
         self.assertIn("CROSSCHECK_UNRESOLVED", rec.decision.flags)
         self.assertTrue(any("please confirm the category" in r for r in rec.decision.reasons))
+        self.assertIn("Unsure what kind of complaint this is: Service complaint or ATM cash not dispensed. "
+                      "Confirm before approving", case_summary(stored(rec))["why_here"])
 
     def test_leaving_a_fraud_category_needs_high_confidence(self):
         text = "I feel deceived by this RM12 annual fee on my debit card."

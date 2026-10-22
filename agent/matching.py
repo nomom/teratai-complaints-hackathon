@@ -37,6 +37,7 @@ class Match:
     candidates: list = field(default_factory=list)   # [(score, txn_id)] best first
     reasons: list = field(default_factory=list)
     flags: list = field(default_factory=list)
+    dates: dict = field(default_factory=dict)        # how the date phrase was read: {phrase, from, to, rule}
 
 
 def _name_hit(t, ex: Extraction, text: str) -> bool:
@@ -68,6 +69,8 @@ def find_transaction(complaint: dict, ex: Extraction) -> Match:
     pool = tools.find_debits(complaint["customer_id"], since, recv, CHANNELS.get(ex.category))
     text = (complaint.get("subject", "") + " " + complaint["text"]).lower()
     dates = resolve_dates(ex.date_phrase or text, recv)
+    when = {"phrase": ex.date_phrase or "(none given: searched the message)", "from": str(dates.start),
+            "to": str(dates.end), "rule": dates.rule}
 
     scored = []
     for t in pool:
@@ -102,15 +105,16 @@ def find_transaction(complaint: dict, ex: Extraction) -> Match:
         scored.append((s, t, why))
 
     if not scored:
-        return Match(None, flags=["NO_MATCH"], reasons=[f"No {ex.category} candidate in the window fits the clues"])
+        return Match(None, flags=["NO_MATCH"], dates=when,
+                     reasons=[f"No {ex.category} candidate in the window fits the clues"])
     scored.sort(key=lambda x: x[0], reverse=True)
     best_s, best, why = scored[0]
     candidates = [(round(s, 2), t["txn_id"]) for s, t, _ in scored[:5]]
     if not why:   # nothing in the message points at it: never pin a case (or a refund) on the only transaction around
-        return Match(None, candidates=candidates, flags=["NO_MATCH"],
+        return Match(None, candidates=candidates, flags=["NO_MATCH"], dates=when,
                      reasons=[f"No clue in the message (amount, date, name, card) supports any of the "
                               f"{len(scored)} {ex.category} candidate(s) in the window"])
-    m = Match(best, candidates=candidates, reasons=[f"Matched {best['txn_id']} on: {', '.join(why)}"])
+    m = Match(best, candidates=candidates, dates=when, reasons=[f"Matched {best['txn_id']} on: {', '.join(why)}"])
     if len(scored) > 1 and int(scored[1][0]) == int(best_s):
         m.flags.append("AMBIGUOUS_MATCH")
     return m

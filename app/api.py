@@ -11,6 +11,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from agent.summary import case_summary
 from app import store
 from app.worker import submit, submit_reply
 
@@ -67,10 +68,11 @@ def cases(status: Optional[str] = None, limit: int = 200):
 
 @app.get("/cases/{complaint_id}")
 def case(complaint_id: str):
+    """The full case, plus `summary`: the at-a-glance view the dashboard shows first (agent/summary.py)."""
     c = store.get_case(complaint_id)
     if not c:
         raise HTTPException(404, "not processed yet (is the worker running?)")
-    return c
+    return {**c, "summary": case_summary(c["record"], c["status"])}
 
 
 @app.post("/cases/{complaint_id}/approve")

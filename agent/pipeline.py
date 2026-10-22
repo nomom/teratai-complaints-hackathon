@@ -69,15 +69,29 @@ def process_complaint(c: dict, oracle_category: str | None = None) -> CaseRecord
         template = lambda: reply.draft_template(c, decision, lang)                 # noqa: E731
         status = None                                                              # set from the route below
 
-    text = step("draft_reply", draft)
+    def attempt(name, feedback=""):
+        """Draft once; record whether the LLM wrote it or the template stood in (an LLM failure falls back)."""
+        before = len(usage.failures)
+        out = step(name, lambda: draft(feedback))
+        source = "llm" if llm.enabled() and len(usage.failures) == before else "template"
+        trace[-1]["detail"] = {"source": source}
+        return out, source
+
+    rejected = []                                  # drafts the self-check turned down, kept for the audit
+    text, source = attempt("draft_reply")
     problems = step("check", lambda: checks.check(c, decision, text, lang))
     if problems:                                   # redraft once with the problems as feedback, then the template
-        text = step("redraft", lambda: draft("; ".join(problems)))
+        rejected.append({"source": source, "text": text, "problems": problems})
+        text, source = attempt("redraft", "; ".join(problems))
         problems = step("recheck", lambda: checks.check(c, decision, text, lang))
         if problems:
-            text = template()
+            rejected.append({"source": source, "text": text, "problems": problems})
+            text, source = template(), "template"
             problems = checks.check(c, decision, text, lang)
     trace[-1]["detail"] = {"problems": problems}
+    decision.evidence["reply"] = {"source": source, "language": lang,
+                                  "language_why": extract.reply_language_why(c, ex.language),
+                                  "rejected_drafts": rejected}
 
     if problems:                                   # a reply that fails the check never goes out on its own
         decision.flags.append("CHECK_FAILED")
@@ -100,13 +114,15 @@ def process_complaint(c: dict, oracle_category: str | None = None) -> CaseRecord
 def _no_action(c: dict, category: str, reason: str) -> Decision:
     """A message we answer without touching money: no transaction, no refund, auto-sent reply."""
     return Decision(matched_txn_id="", outcome="INFO_ONLY", refund_amount_myr=0.0,
-                    priority=policy.priority(c, category), route="AUTO_RESOLVE", reasons=[reason])
+                    priority=policy.priority(c, category), route="AUTO_RESOLVE", reasons=[reason],
+                    evidence=policy.context(c, category))
 
 
 def _undecided(c: dict, category: str, reason: str) -> Decision:
     """A case still gathering facts: no transaction, outcome or route yet. Priority is known, so the SLA clock runs."""
     return Decision(matched_txn_id="", outcome="", refund_amount_myr=0.0,
-                    priority=policy.priority(c, category), route="", reasons=[reason])
+                    priority=policy.priority(c, category), route="", reasons=[reason],
+                    evidence=policy.context(c, category))
 
 
 def follow_up_complaint(original: dict, reply_text: str) -> dict:
