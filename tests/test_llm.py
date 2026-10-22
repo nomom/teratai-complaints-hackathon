@@ -14,8 +14,9 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace as NS
 
-from agent import extract, llm, tools
+from agent import checks, extract, llm, reply, tools
 from agent.pipeline import MAX_FOLLOW_UPS, follow_up_complaint, process_complaint
+from agent.schemas import Decision
 from app import store
 
 
@@ -228,11 +229,73 @@ class Intents(LLMTestCase):
                 ex = extract.extract(self.complaint(text), llm.Usage())
                 self.assertEqual((ex.category, ex.source), (category, "llm"))
 
+    def test_code_owns_language_and_hedge_words(self):
+        # The two misses from the 200-complaint run with a real model
+        self.use(FakeOpenAI(extraction(category="SERVICE_QUALITY", language="MS")))
+        ex = extract.extract(self.complaint("Tunggu 2 jam kat branch Kuantan, staff pun rude. Teruk betul service."),
+                             llm.Usage())
+        self.assertEqual((ex.language, ex.crosscheck["language"]), ("MIXED", {"llm": "MS", "code": "MIXED"}))
+
+        self.use(FakeOpenAI(extraction(category="FAILED_TRANSFER", language="MIXED", amount=2200.0)))
+        ex = extract.extract(self.complaint("DuitNow transfer dalam RM2200 to Siti Nadia binti Hassan pada 30/07/2026 "
+                                            "tak masuk pun, tapi account saya dah kena deduct."), llm.Usage())
+        self.assertTrue(ex.amount_approx)
+        self.assertIn("amount_approx", ex.crosscheck)
+        self.assertEqual(ex.crosscheck["result"], "agree")             # category check still recorded alongside
+
     def test_follow_ups_used_up_goes_to_officer(self):
         self.use(FakeOpenAI(extraction(intent="NEEDS_DETAILS", missing_info=["what_happened"])))
         rec = process_complaint(self.complaint("still a problem", cid="TEST-MAX", follow_ups=MAX_FOLLOW_UPS))
         self.assertEqual(rec.decision.route, "HUMAN_APPROVAL")
         self.assertIn("DETAILS_STILL_MISSING", rec.decision.flags)
+
+
+class Replies(LLMTestCase):
+    """What a reply may say. Cases come from the first run with a real model, where these slipped through."""
+
+    FEE = {"customer_id": "CUS-00890", "received_at": "2026-09-30 11:41", "channel": "Email", "subject": "",
+           "complaint_id": "T-FEE", "text": "Why did you take RM12 annual fee from my account on 26 September?"}
+
+    def fee_case(self):
+        self.use(FakeOpenAI(extraction(category="FEE_DISPUTE", amount=12.0, fee_type="DEBIT_ANNUAL"),
+                            reply=APITimeoutError("down")))              # template reply
+        return process_complaint(self.FEE)
+
+    def test_drafter_never_sees_age_or_internal_reasons(self):
+        rec = self.fee_case()
+        self.assertTrue(any("age" in r for r in rec.decision.reasons))     # the officer still sees it
+        self.assertIn("customer_age", rec.decision.evidence)
+        client = self.use(FakeOpenAI(extraction(category="FEE_DISPUTE", amount=12.0, fee_type="DEBIT_ANNUAL")))
+        process_complaint(self.FEE)
+        prompt = client.calls[1]["input"]                                  # the reply request
+        age = str(rec.decision.evidence["customer_age"])
+        for leaked in ("customer_age", "(age", f" {age}", "account_id", "applies ("):
+            self.assertNotIn(leaked, prompt)
+
+    def test_template_explains_without_internal_text(self):
+        rec = self.fee_case()
+        self.assertEqual(rec.decision.outcome, "DECLINE")
+        self.assertIn("charged correctly under the terms of your account", rec.reply_text)
+        self.assertNotRegex(rec.reply_text, r"\bage\b|applies \(")
+
+    def test_checks_catch_what_a_bank_must_not_say(self):
+        rec = self.fee_case()
+        c, d = self.FEE, rec.decision
+        base = "Dear Kavitha,\n\nWe have reviewed transaction {}. ".format(d.matched_txn_id)
+        self.assertTrue(checks.check(c, d, base + "This fee applies at age 55.\n\nTeratai Bank Customer Care", "EN"))
+        investigate = Decision("", "INVESTIGATE", 0.0, "P1", "FRAUD_TEAM")
+        bad = "Dear Kavitha,\n\nThis transaction was identified as a scam. Our fraud team will contact you.\n\nTeratai Bank Customer Care"
+        self.assertTrue(checks.check(c, investigate, bad, "EN"))
+        fine = ("Dear Kavitha,\n\nOur fraud team is reviewing your case and will contact you. Remember, anyone asking for "
+                "your OTP is a scam.\n\nTeratai Bank Customer Care")
+        self.assertEqual(checks.check(c, investigate, fine, "EN"), [])
+        info = Decision("", "INFO_ONLY", 0.0, "P3", "AUTO_RESOLVE")
+        self.assertTrue(checks.check(c, info, "Dear Kavitha,\n\nSorry about the app. This does not qualify for a "
+                                              "refund.\n\nTeratai Bank Customer Care", "EN"))
+
+    def test_markdown_is_stripped(self):
+        self.assertEqual(reply.plain_text("## Update\nRefund of **RM1,500.00** is on its way.\n* item"),
+                         "Update\nRefund of RM1,500.00 is on its way.\n- item")
 
 
 class CrossCheck(LLMTestCase):

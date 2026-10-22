@@ -50,10 +50,10 @@ def schema(options: list[str]) -> dict:
 
 def check(complaint: dict, ex: Extraction, rules_category: str | None, usage: llm.Usage | None = None) -> Extraction:
     if rules_category is None:
-        ex.crosscheck = {"result": "rules_no_opinion"}
+        ex.crosscheck |= {"result": "rules_no_opinion"}
         return ex
     if rules_category == ex.category:
-        ex.crosscheck = {"result": "agree"}
+        ex.crosscheck |= {"result": "agree"}
         return ex
 
     first = ex.category
@@ -63,7 +63,7 @@ def check(complaint: dict, ex: Extraction, rules_category: str | None, usage: ll
     try:
         ans = llm.complete_json(SYSTEM, _prompt(complaint, options, facts), schema(options), usage)
     except llm.LLMError as e:
-        ex.crosscheck = {**record, "second_look": {"error": e.kind}, "resolution": "officer", "final": first}
+        ex.crosscheck |= {**record, "second_look": {"error": e.kind}, "resolution": "officer", "final": first}
         return ex
 
     quote_ok = _quote_in(ans["quote"], complaint)
@@ -78,7 +78,7 @@ def check(complaint: dict, ex: Extraction, rules_category: str | None, usage: ll
         why = ""
     final = first if why else ans["category"]
     ex.category = final
-    ex.crosscheck = {**record, "second_look": ans, "quote_ok": quote_ok,
+    ex.crosscheck |= {**record, "second_look": ans, "quote_ok": quote_ok,
                      "resolution": "officer" if why else "second_look", "why": why, "final": final}
     return ex
 

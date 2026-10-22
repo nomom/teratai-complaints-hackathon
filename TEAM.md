@@ -115,16 +115,18 @@ Goal: category and language near 100%; replies a bank would send; a self-check j
 - [x] **Scams classed as FAILED_TRANSFER (20, critical errors):** rule keywords added. When the LLM is on, only strong scam phrases ("safe account", "skim pelaburan", "online acquaintance"...) override its category; everyday words like "parcel" or "police" never do. Keywords match whole words only ("invest" no longer matches "investigate")
 - [x] ATM complaints classed as SERVICE_QUALITY (70): "withdrew", "mengeluarkan", "did not dispense", "duit tak keluar"
 - [x] Reply language (91 misses → 0): bigger EN/MS word lists; English counts only in lowercase, so names like "Shah Alam Branch" don't make Malay text MIXED. Tests in `tests/test_extract.py`
-- [ ] Turn the LLM on (`LLM_PROVIDER=anthropic`), run 100–200 train complaints, compare against the rules, record tokens and cost per complaint
+- [x] LLM measured (OpenAI `gpt-5.6-luna`). 200 train complaints: **99.25 with the LLM, 99.25 rules only**, zero critical errors, no LLM failures. 14 newly written live-round-style complaints: **LLM 14/14, rules 4/14** (rules miss ATM/fraud/fee without keywords, vague and off-topic messages). Per complaint: 2 calls, ~2,100 input + ~200 output tokens, ~4.5 s (0.5 s each with 8 workers)
 - [x] Few-shot examples in the extraction prompt, picked from the confused categories (plus one vague and one off-topic message)
-- [ ] Decide, from measurement, whether the reply language comes from the LLM or from `detect_language()` (100% on train)
+- [x] Language comes from `detect_language()` (the LLM called colloquial mixed text MS); hedge words before an amount ("dalam RM2200") are also read by code. Disagreements are logged in the case's `crosscheck`
 - [x] Cross-check (`agent/crosscheck.py`): when the LLM's category differs from a keyword the rules matched, one "second look" call picks between the two. It sees both options unlabelled, plus what each would match in the customer's transactions, and must quote the message. A quote that isn't in the message, low confidence, or leaving a fraud category without high confidence → `CROSSCHECK_UNRESOLVED`, the officer decides
-- [ ] Measure the cross-check with the LLM on (`crosscheck:` line in the `run_batch` summary). On train every disagreement is an LLM mistake (rules are 100%), so count how many the second look fixes vs how many correct answers it flips. Drop it if it flips more than it fixes
-- [ ] Better replies per category in EN and MS: tone, SLA timeline, short (judges read 10)
-- [ ] Harden `checks.py`: wrong refund amount, refund promised on a decline, wrong language. Try to break it like a judge would
+- [ ] Measure the cross-check's second look: in 214 real-LLM complaints it never triggered (LLM and rules agreed, or the rules had no keyword). Needs adversarial cases to measure fixes vs flips
+- [x] Replies: the drafter only sees customer-safe facts and a plain explanation from code (`reply.customer_why`), never the internal reasons or the customer's age; Markdown is stripped; fraud replies say "under review", never "confirmed fraud"; no refund talk on service complaints. Templates use the same explanations in EN and MS
+- [ ] SLA timeline in replies (`tools.sla(priority)`)
+- [x] `checks.py` also rejects: the customer's age or date of birth, declaring fraud before review, refund talk with no money decision. 0 of 200 real-LLM first drafts were rejected
+- [ ] Keep trying to break `checks.py` like a judge would (edited replies especially)
 - [x] LLM reliability: timeouts, SDK retries, a per-complaint call/token budget, and every failure recorded by kind (`timeout`, `refusal`, `bad_json`, ...) with a fallback to rules/templates. Tests in `tests/test_llm.py` use fake clients (no key, no cost)
 - [x] Intents: vague complaints get a follow-up question (the case stays open as `AWAITING_CUSTOMER` with no decision until the customer replies), off-topic messages get a polite answer (`ANSWERED`). Possible fraud never waits; after 2 unanswered follow-ups an officer takes over
-- [ ] Measure intent on real phrasing: the LLM must not mark specific complaints as `NEEDS_DETAILS` (check `intents:` in the `run_batch` summary on train, where every message is a real complaint)
+- [x] Intent on real phrasing: 0 of 214 real complaints wrongly marked `NEEDS_DETAILS` or `OUT_OF_SCOPE`
 - [ ] A date phrase in a customer's follow-up reply ("yesterday") is read relative to the original message time, not the reply time
 
 ### C: platform and demo

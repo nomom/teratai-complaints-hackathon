@@ -70,7 +70,7 @@ class Extraction:
     confidence: str = ""                # high | medium | low (LLM only; recorded for monitoring, not routing)
     missing_info: list = field(default_factory=list)   # NEEDS_DETAILS: what to ask for, e.g. ["date", "amount"]
     source: str = "rules"               # rules | llm | "rules (llm failed: <kind>)"
-    crosscheck: dict = field(default_factory=dict)     # LLM vs rules on category, and how a disagreement was settled
+    crosscheck: dict = field(default_factory=dict)     # LLM vs code: category (and how it was settled), language, hedges
 
     def to_dict(self):
         return asdict(self)

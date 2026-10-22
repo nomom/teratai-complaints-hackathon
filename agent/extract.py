@@ -217,16 +217,37 @@ Channel: Email | Complaint: Boleh tak bagitahu cuaca esok di KL?
 
 
 def extract_llm(complaint: dict, usage: llm.Usage | None = None) -> Extraction:
+    """The LLM reads the message; code keeps two fields it measures better (see the notes in `crosscheck`):
+    - language: detect_language() is 100% on train; the LLM called colloquial mixed text MS
+    - amount_approx: a hedge word before the amount ("dalam RM2200") makes it approximate even if the LLM missed it,
+      otherwise matching demands the exact amount and loses the transaction
+    """
     user = f"Channel: {complaint.get('channel', '')}\nSubject: {complaint.get('subject', '')}\nComplaint: {complaint['text']}"
     d = llm.complete_json(SYSTEM, user, SCHEMA, usage)
     recv = tools.received(complaint)
+    notes = {}
+    language = detect_language(complaint["text"])
+    if d["language"] != language:
+        notes["language"] = {"llm": d["language"], "code": language}
+    approx = d["amount_approx"]
+    if d["amount"] is not None and not approx and _hedged(complaint, d["amount"]):
+        approx, notes["amount_approx"] = True, "hedge word before the amount (code)"
     return Extraction(
-        category=d["category"], language=d["language"], amount=d["amount"], amount_approx=d["amount_approx"],
+        category=d["category"], language=language, amount=d["amount"], amount_approx=approx,
         counterparty=d["counterparty"], date_phrase=d["date_phrase"], card_last4=d["card_last4"][-4:],
         fee_type=d["fee_type"], fee_month=month_of(d["fee_month_phrase"], recv),
         intent=d["intent"], confidence=d["confidence"],
-        missing_info=d["missing_info"] if d["intent"] == "NEEDS_DETAILS" else [], source="llm",
+        missing_info=d["missing_info"] if d["intent"] == "NEEDS_DETAILS" else [], source="llm", crosscheck=notes,
     )
+
+
+def _hedged(complaint: dict, amount: float) -> bool:
+    """Is this amount written with a hedge word in front of it ("about RM300", "dalam RM2200")?"""
+    text = f"{complaint.get('subject', '')} {complaint['text']}"
+    for m in re.finditer(rf"({APPROX})?RM\s?([\d,]+(?:\.\d{{1,2}})?)", text, re.I):
+        if m.group(1) and abs(float(m.group(3).replace(",", "")) - amount) < 0.005:
+            return True
+    return False
 
 
 def extract(complaint: dict, usage: llm.Usage | None = None) -> Extraction:
