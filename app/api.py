@@ -63,7 +63,8 @@ def customer_reply(complaint_id: str, body: CustomerReplyIn):
 
 @app.get("/cases")
 def cases(status: Optional[str] = None, limit: int = 200):
-    return store.list_cases(status, limit)
+    """`status` may list several, comma-separated: ?status=RESOLVED,ANSWERED"""
+    return store.list_cases(status.split(",") if status else None, limit)
 
 
 @app.get("/cases/{complaint_id}")
@@ -90,6 +91,21 @@ def approve(complaint_id: str, body: ApprovalIn):
 def reject(complaint_id: str, body: ApprovalIn):
     try:
         store.reject(complaint_id, body.officer, body.note)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+    return store.get_case(complaint_id)
+
+
+class FlagIn(BaseModel):
+    officer: str
+    note: str
+
+
+@app.post("/cases/{complaint_id}/flag")
+def flag(complaint_id: str, body: FlagIn):
+    """Question a case whose reply has already gone out (spot-check of automatic decisions). Audited; changes nothing."""
+    try:
+        store.flag_for_review(complaint_id, body.officer, body.note)
     except ValueError as e:
         raise HTTPException(409, str(e))
     return store.get_case(complaint_id)

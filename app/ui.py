@@ -24,9 +24,12 @@ DEFAULT_RECEIVED = "2026-09-30 18:00"
 CHANNELS = ["App chat", "Email", "Call centre note", "Branch form", "Social media DM"]
 STATUS_WORDS = {"PENDING_APPROVAL": "Approval queue", "FRAUD_QUEUE": "Fraud queue",
                 "AWAITING_CUSTOMER": "Awaiting customer", "RESOLVED": "Resolved automatically",
-                "ANSWERED": "Answered (off-topic)", "APPROVED": "Approved and sent", "REJECTED": "Rejected"}
+                "ANSWERED": "Answered (off-topic)", "APPROVED": "Approved and sent", "REJECTED": "Rejected",
+                "SENT": "Resolved automatically (old)"}
+AUTO_SENT = ["RESOLVED", "ANSWERED", "SENT"]          # replies that went out with no person involved
 
-page = st.sidebar.radio("Page", ["Submit complaint", "Approval queue", "Fraud queue", "Awaiting customer", "All cases"])
+page = st.sidebar.radio("Page", ["Submit complaint", "Approval queue", "Fraud queue", "Awaiting customer",
+                                 "Resolved automatically", "All cases"])
 for status, n in sorted(store.counts().items(),
                         key=lambda x: list(STATUS_WORDS).index(x[0]) if x[0] in STATUS_WORDS else 99):
     st.sidebar.write(f"{STATUS_WORDS.get(status, status)}: **{n}**")
@@ -45,6 +48,8 @@ def show_case(case, actions=False, headline=True):
     box = {"warning": st.warning, "error": st.error, "info": st.info}.get(s["tone"], st.success)
     box("\n".join(f"- {w}" for w in s["why_here"]) if len(s["why_here"]) > 1 else s["why_here"][0])
     st.markdown(f"{s['story']}  \n**Decision:** {s['decision']}")
+    for f in [a for a in case.get("audit", []) if a["action"] == "flagged_for_review"]:
+        st.warning(f"Flagged for review by {f['actor']} ({f['ts']}): {f['detail']}")
     if s["key_row"]:
         st.code(s["key_row"], language=None)
     if s["warnings"]:
@@ -70,7 +75,10 @@ def show_case(case, actions=False, headline=True):
             except ValueError as e:
                 st.error(str(e))
     else:
-        st.text_area("Reply to the customer", case["reply_text"], height=180, disabled=True, key=f"r-{cid}")
+        label = "Reply sent to the customer" if case["status"] in store.SENT_STATUSES else "Reply to the customer"
+        st.text_area(label, case["reply_text"], height=180, disabled=True, key=f"r-{cid}")
+        if case["status"] in store.SENT_STATUSES:
+            flag_box(case)
     if case["status"] == "AWAITING_CUSTOMER":
         customer_reply_box(case)
     details(case)
@@ -126,6 +134,30 @@ def details(case):
                    f"output tokens" + (f", failures: {u['failures']}" if u.get("failures") else ""))
     with st.expander("Audit log", type="compact"):
         st.table(case["audit"])
+
+
+def flag_box(case):
+    """Spot-check: question a case whose reply already went out. Audited for follow-up; changes nothing."""
+    cid = case["complaint_id"]
+    with st.popover("Flag for review"):
+        note = st.text_input("What looks wrong?", key=f"fn-{cid}",
+                             placeholder="e.g. wrong transaction refunded, reply tone")
+        officer = st.text_input("Officer", "officer1", key=f"fo-{cid}")
+        if st.button("Flag", key=f"fb-{cid}"):
+            try:
+                store.flag_for_review(cid, officer, note)
+                st.rerun()
+            except ValueError as e:
+                st.error(str(e))
+
+
+def case_list(rows, actions=False):
+    """One line per case (headline and why it is here); open one to see it."""
+    for row in rows:
+        case = store.get_case(row["complaint_id"])
+        s = case_summary(case["record"], case["status"])
+        with st.expander(f"{s['headline']} — {s['why_here'][0]}"):
+            show_case(case, actions=actions, headline=False)
 
 
 def customer_reply_box(case):
@@ -187,20 +219,35 @@ elif page in ("Approval queue", "Fraud queue"):
     rows = store.list_cases(status)
     st.header(f"{page} ({len(rows)})")
     st.caption("Each case says why it needs you. Open one to review the decision and the reply.")
-    for row in rows:
-        case = store.get_case(row["complaint_id"])
-        s = case_summary(case["record"], case["status"])
-        with st.expander(f"{s['headline']} — {s['why_here'][0]}"):
-            show_case(case, actions=True, headline=False)
+    case_list(rows, actions=True)
+
+elif page == "Resolved automatically":
+    rows = store.list_cases(AUTO_SENT)
+    st.header(f"Resolved automatically ({len(rows)})")
+    st.caption("Replies that went out with no person involved: refunds within the limit, service complaints and "
+               "off-topic messages. Spot-check them; flag anything that looks wrong for follow-up.")
+    flagged = store.flagged_ids()
+    if flagged and st.toggle(f"Only flagged for review ({len([r for r in rows if r['complaint_id'] in flagged])})"):
+        rows = [r for r in rows if r["complaint_id"] in flagged]
+    case_list(rows)
 
 else:
-    rows = store.list_cases()
-    st.header(f"All cases ({len(rows)})")
-    st.dataframe([{"case": r["complaint_id"], "status": STATUS_WORDS.get(r["status"], r["status"]),
-                   "category": r["category"], "outcome": r["outcome"] or "-", "refund": money(r["refund_amount_myr"]),
-                   "priority": r["priority"], "reply checked": "yes" if r["check_ok"] else "NO",
-                   "updated": r["updated_at"]} for r in rows], width="stretch")
-    pick = st.text_input("Open case")
-    if pick:
-        case = store.get_case(pick.strip())
-        show_case(case) if case else st.warning("Not found")
+    choices = {"All": None, **{w: [st_] for st_, w in STATUS_WORDS.items() if st_ != "SENT"},
+               "Flagged for review": "flagged"}
+    pick = st.selectbox("Show", list(choices))
+    want = choices[pick]
+    rows = store.list_cases(None if want == "flagged" else want, limit=1000)
+    if want == "flagged":
+        flagged = store.flagged_ids()
+        rows = [r for r in rows if r["complaint_id"] in flagged]
+    st.header(f"{pick if pick != 'All' else 'All cases'} ({len(rows)})")
+    st.caption("Click a row to open the case.")
+    event = st.dataframe(
+        [{"case": r["complaint_id"], "status": STATUS_WORDS.get(r["status"], r["status"]), "category": r["category"],
+          "outcome": r["outcome"] or "-", "refund": money(r["refund_amount_myr"]), "priority": r["priority"],
+          "reply checked": "yes" if r["check_ok"] else "NO", "updated": r["updated_at"]} for r in rows],
+        width="stretch", on_select="rerun", selection_mode="single-row", key="all-cases")
+    if event.selection.rows:
+        case = store.get_case(rows[event.selection.rows[0]]["complaint_id"])
+        st.divider()
+        show_case(case, actions=case["status"] in ("PENDING_APPROVAL", "FRAUD_QUEUE"))

@@ -472,6 +472,22 @@ class CaseLifecycle(LLMTestCase):
         self.assertEqual(case["record"]["reply_text"], rec.reply_text)            # the agent's draft is kept
         self.assertEqual([a["action"] for a in case["audit"]][-2:], ["approved", "reply_sent"])
 
+    def test_flag_for_review_only_after_the_reply_went_out(self):
+        self.pending_atm_case()                                        # still waiting: review it in the queue
+        with self.assertRaises(ValueError):
+            self.store.flag_for_review("CMP-00244", "officer1", "looks off")
+        self.store.save_case(process_complaint(tools.get_db().complaints["CMP-00165"]))   # resolved automatically
+        with self.assertRaises(ValueError):
+            self.store.flag_for_review("CMP-00165", "officer1", "   ")      # must say what needs reviewing
+        self.store.flag_for_review("CMP-00165", "officer1", "Check the twin charge was not already refunded")
+        case = self.store.get_case("CMP-00165")
+        self.assertEqual(case["status"], "RESOLVED")                    # nothing about the case changes
+        self.assertEqual((case["audit"][-1]["action"], case["audit"][-1]["detail"]),
+                         ("flagged_for_review", "Check the twin charge was not already refunded"))
+        self.assertEqual(self.store.flagged_ids(), {"CMP-00165"})
+        self.assertEqual([r["complaint_id"] for r in self.store.list_cases(["RESOLVED", "ANSWERED"])], ["CMP-00165"])
+        self.assertEqual(len(self.store.list_cases()), 2)
+
     def test_reject_only_acts_on_a_queued_case(self):
         self.pending_atm_case()
         self.store.approve("CMP-00244", "officer1")

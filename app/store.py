@@ -77,9 +77,34 @@ def log(complaint_id, actor, action, detail=""):
 
 
 def list_cases(status=None, limit=200):
+    """Newest first. `status` is one status, a list of statuses, or None for all."""
+    statuses = [status] if isinstance(status, str) else list(status or [])
     with connect() as con:
-        q = "SELECT * FROM cases" + (" WHERE status = ?" if status else "") + " ORDER BY updated_at DESC LIMIT ?"
-        return [dict(r) for r in con.execute(q, (status, limit) if status else (limit,))]
+        where = f" WHERE status IN ({','.join('?' * len(statuses))})" if statuses else ""
+        q = f"SELECT * FROM cases{where} ORDER BY updated_at DESC LIMIT ?"
+        return [dict(r) for r in con.execute(q, (*statuses, limit))]
+
+
+SENT_STATUSES = ("RESOLVED", "ANSWERED", "APPROVED", "SENT")     # the reply has gone out (SENT: before the rename)
+
+
+def flag_for_review(complaint_id, officer, note):
+    """An officer questions a case whose reply has already gone out (e.g. a spot-check of an automatic refund).
+    Recorded in the audit log for follow-up; the case and what was sent are not changed."""
+    if not note.strip():
+        raise ValueError("say what needs reviewing")
+    with connect() as con:
+        row = con.execute("SELECT status FROM cases WHERE complaint_id = ?", (complaint_id,)).fetchone()
+        if not row or row["status"] not in SENT_STATUSES:
+            raise ValueError(f"{complaint_id} has not been sent yet: review it in its queue instead")
+        audit(con, complaint_id, officer, "flagged_for_review", note.strip())
+
+
+def flagged_ids():
+    """Cases an officer has flagged for review."""
+    with connect() as con:
+        return {r["complaint_id"] for r in con.execute(
+            "SELECT DISTINCT complaint_id FROM audit WHERE action = 'flagged_for_review'")}
 
 
 def get_case(complaint_id):
