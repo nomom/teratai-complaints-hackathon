@@ -53,7 +53,7 @@ The full decision rules are in [`data/complaint_policy.csv`](data/complaint_poli
 
 This is an agent hackathon, not a classification contest. A model that only labels CSV rows won't win. Your solution must:
 
-1. **React to events.** A new complaint starts the workflow on its own (a watched folder, a queue or an API, your choice).
+1. **React to events.** A new complaint starts the workflow on its own (a watched folder, a queue or an API, your choice). In the live round, your intake must accept one new complaint in the format described under *The live round* below.
 2. **Use tools.** It looks things up through tools or functions (customer, accounts, transactions, ATM journal, fee schedule). It does not paste whole tables into a prompt.
 3. **Act.** It writes a case record: the decision, the evidence it used and the drafted reply.
 4. **Keep a human in charge.** Cases that need approval wait in an approval queue, and fraud cases land in a fraud queue. Nothing that needs approval goes out without it.
@@ -105,6 +105,17 @@ A decision about the wrong transaction earns nothing, so finding the right trans
 | 25% | Business value and demo | Reply quality (tone, correct language, no invented facts; judges read 10 of your replies), clarity, and whether a bank would use it |
 | 20% | Engineering | Architecture, observability (can you show why it decided what it did?), cost and speed per complaint |
 
+### The live round
+
+During your demo, a judge gives you 2 or 3 new complaints written for the event. Each one has the same fields as a row of `complaints.csv`. A made-up example of the format:
+
+```
+complaint_id,customer_id,received_at,channel,subject,text
+LIVE-07,CUS-01234,2026-09-30 10:15,App chat,,"Hi, I was charged twice at ShopLah Online today for RM89.90..."
+```
+
+The customer and the transaction already exist in the data. `received_at` is 30 Sep 2026, the last day of the data. Your system must take the complaint in without code changes (for example, a file dropped into a watched folder or a POST to your API). It must process it on its own and show the case record with its evidence, the route and the reply. Cases that need approval must wait for a human to approve them.
+
 ## Schedule
 
 **Day 1**
@@ -135,7 +146,7 @@ The 750 test complaints are in `complaints.csv` from the start, so you can run t
 
 ## Getting started
 
-Teams of 3 to 5. Use any language, agent framework and LLM your team can access. The starter kit needs only Python 3.10+, with no packages to install.
+Teams of 3 to 5. Use any language, agent framework and LLM your team can access. The starter kit needs only Python 3.10+, with no packages to install. On macOS or Linux, use `python3` where the commands below say `python`.
 
 ```bash
 git clone https://github.com/DM-Data-Science/teratai-complaints-hackathon.git
@@ -155,24 +166,33 @@ python starter/check_reply.py CMP-00244 "We have refunded RM600.00 for transacti
 
 More in [`docs/build_guide.md`](docs/build_guide.md): a reference workflow, where to use the LLM and where to use code, and common pitfalls.
 
+## Bonus: the ops platform
+
+An optional, separately judged award ("Best Ops Platform") for teams that turn the case record into a real back-office system: complaints officers and fraud analysts sign in to interfaces fitted to their job and see only their cases, a manager handles second-tier approval across both queues, and every action is written back and audited. It does not affect the main ranking or the leaderboard. See [`docs/bonus_platform.md`](docs/bonus_platform.md).
+
 ## Submitting
 
-1. Run your workflow on all 750 complaints in `test_ids.csv`.
-2. Save `submissions/<team-name>/predictions.csv` with these columns: `complaint_id, category, matched_txn_id, outcome, refund_amount_myr, priority, reply_language, route, reply_text`. The format is in [`docs/scoring.md`](docs/scoring.md).
-3. Push it on a branch named `team/<team-name>` and open a pull request before **15:00 on Day 2**.
+1. Fork this repo (one fork per team) and build in your fork.
+2. Run your workflow on all 750 complaints in `test_ids.csv`.
+3. Save `submissions/<team-name>/predictions.csv` with these columns: `complaint_id, category, matched_txn_id, outcome, refund_amount_myr, priority, reply_language, route, reply_text`. The format is in [`docs/scoring.md`](docs/scoring.md).
+4. Open a pull request from your fork to this repo, titled `Submission: <team-name>`, before **15:00 on Day 2**. The PR only needs the predictions file; your code can stay in your fork.
+
+Building the [bonus ops platform](docs/bonus_platform.md)? Your `predictions.csv` is still the agent's autonomous output, exported from your database and scored exactly as above — the platform does not change what you submit.
+
+If this repo changes before the event (clarifications only, never the data), sync your fork with GitHub's **Sync fork** button.
 
 ## Ground rules
 
-- **Your workflow produces the answers.** No hand-labelling of the test set. The live round shows whether your system really works; a big gap between your leaderboard score and the live round will be questioned.
+- **Your workflow produces the answers.** No hand-labelling of the test set. The live round shows whether your system really works; a big gap between your leaderboard score and the live round will be questioned. This holds even if you build the [bonus ops platform](docs/bonus_platform.md): the scored `predictions.csv` is always the agent's autonomous decision, never the human-corrected one.
 - **Use any tools.** That includes any LLM, framework or cloud service. You may use the training labels however you like: few-shot examples, evaluation, fine-tuning.
 - **Data stays synthetic.** Don't add real customer data, and keep API keys out of the repo.
-- **Ask early.** If a rule is unclear, ask the organisers. The answer is shared with every team.
+- **Ask early.** If a rule is unclear, [open an issue](https://github.com/DM-Data-Science/teratai-complaints-hackathon/issues) in this repo. Every team can see the answers.
 
 ## Repo layout
 
 ```
 data/          the CSVs (complaints, customers, accounts, transactions, ATM journal, policies, training labels, test IDs)
-docs/          data dictionary, scoring details, build guide
+docs/          data dictionary, scoring details, build guide, bonus ops platform
 starter/       evidence pack builder, reply checker, keyword baseline (Python, standard library only)
 scoring/       score.py: the scorer used for the leaderboard
 submissions/   one folder per team

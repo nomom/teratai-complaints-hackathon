@@ -61,4 +61,4 @@ python scoring/score.py submissions/<team>/predictions.csv data/labels_train.csv
 
 ### The live round
 
-During your demo the judges type a few new complaints, written in front of you, into your system's intake. The transactions they refer to are already in `transactions.csv`. We look for the right decision and the right route. Cases that need approval must wait for approval, and fraud cases must land with the fraud team. The reply must pass your own self-check.
+During your demo the judges give you 2 or 3 new complaints in the same format as a row of `complaints.csv` (`complaint_id, customer_id, received_at, channel, subject, text`, with IDs `LIVE-01`… and `received_at` on 30 Sep 2026). The customers and transactions they refer to are already in the data. Your intake must accept them without code changes. We look for the right decision and the right route. Cases that need approval must wait for approval, and fraud cases must land with the fraud team. The reply must pass your own self-check.
