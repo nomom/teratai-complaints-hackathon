@@ -29,7 +29,7 @@ The contracts between you are in `agent/schemas.py` (`Extraction`, `Decision`, `
 
 One [uv](https://docs.astral.sh/uv/) project for the whole repo: `pyproject.toml` and `uv.lock` at the root pin the exact packages (`anthropic`, `openai`, `fastapi`, `uvicorn`) and Python 3.12, so all three laptops run the same thing. Install uv once with `pip install uv`, or `powershell -c "irm https://astral.sh/uv/install.ps1 | iex"`. The dashboard is a React app in `web/` with its own `package-lock.json`; it needs Node.js 20.19 or newer.
 
-**Quickest start:** on Windows, double-click `run.bat` in the repo root. On macOS or Linux, run `./run.sh`. Both install uv if it is missing, run `uv sync`, create `.env` from `.env.example` on the first run, start the worker, the API and the dashboard, and open http://localhost:8501. `run.bat` uses three windows; `run.sh` uses one terminal, and Ctrl+C stops all three processes.
+**Quickest start:** on Windows, double-click `run.bat` in the repo root. On macOS or Linux, run `./run.sh`. Both need Node.js 20.19 or newer (they stop with a message if it is missing). They install uv if it is missing, run `uv sync` and `npm install` in `web/`, create `.env` from `.env.example` on the first run, start the worker, the API and the React dashboard, and open http://localhost:5173. `run.bat` uses three windows; `run.sh` uses one terminal, and Ctrl+C stops all three processes.
 
 **Everyone, from the repo root:**
 
