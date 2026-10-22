@@ -42,10 +42,13 @@ uv run python -m scripts.run_batch --split train     # train run + score + per-c
 **The app (Person C runs it; anyone can):**
 
 ```powershell
-uv run python -m app.worker                          # terminal 1: reacts to new complaints
-uv run python -m streamlit run app/ui.py             # terminal 2: dashboard, http://localhost:8501
-uv run python -m uvicorn app.api:app --port 8000     # optional, terminal 3: API, docs at http://localhost:8000/docs
+uv run python -m app.worker                          # terminal 1: reacts to new complaints, 8 at a time
+uv run python -m uvicorn app.api:app --host 0.0.0.0 --port 8000   # terminal 2: the API the live round calls
+uv run python -m streamlit run app/ui.py             # terminal 3: dashboard, http://localhost:8501
+uv run python scoring/api_check.py http://localhost:8000          # test the API exactly as the live round will
 ```
+
+**The live round runs through our API** ([docs/api.md](docs/api.md)). `POST /complaints`, `GET /cases/{id}`, `POST /cases/{id}/actions` and `GET /health` need no login (the organisers' calls carry no credentials); everything else, including the full case at `GET /cases/{id}/record`, needs a staff login. The organisers' laptop must reach it from 15:00 until our demo ends: listen on all interfaces (`--host 0.0.0.0`) and give them `http://<laptop-ip>:8000` (allow it through the Windows firewall), or use a tunnel (ngrok, Cloudflare Tunnel). `WORKERS` (default 8) sets how many complaints the worker handles at once; `BACKFILL=0` skips loading `data/complaints.csv` (clean demo or test database, with `CASE_DB=runtime/demo.db`).
 
 On start the worker also loads every complaint in `data/complaints.csv` that isn't in the case store yet (about 15 s for all 2,500, in the background, rules only; `BACKFILL_LLM=1` uses the LLM too). Cases already stored are never reprocessed, so a restart keeps officers' actions. To start over, delete `runtime/cases.db`.
 
@@ -146,7 +149,9 @@ Goal: the live round works without a hitch; test predictions in early.
 - [x] *(done by B, please review)* Case page rebuilt around `agent/summary.py`: why it is in this queue, what happened, the decision, the one transaction that proves it, then the reply and buttons. Full evidence (customer, account, fee schedule row, journal, dates, policy settings), how the agent decided (reasons, what it read, reply source and rejected drafts, steps, cost) and the audit log are collapsed below. `GET /cases/{id}` returns the same `summary` for a React app
 - [x] *(done by B, please review)* **Resolved automatically** page (read-only spot-check of replies no person approved, with a "flagged only" toggle); **All cases** filter by status or "flagged for review", click a row to open it; **Flag for review** on any sent case (audit entry `flagged_for_review`, changes nothing; API `POST /cases/{id}/flag`). `GET /cases?status=` takes several statuses, comma-separated
 - [ ] *Optional, decide at Checkpoint 2:* a React frontend (see "Frontend: Streamlit or React" below)
-- [ ] **Live-round intake:** judges hand us `complaints.csv` rows (`complaint_id, customer_id, received_at, channel, subject, text`, IDs `LIVE-01`…, received on 30 Sep 2026), which must go in with no code changes. The API takes all six fields, and the Streamlit form now has `Complaint ID` and `Subject` too. Still to do: a "paste a CSV row" box (or a script that drops a CSV file's rows into `inbox/`)
+- [x] *(done by B, please review)* **Live-round API** to the contract in [docs/api.md](docs/api.md): no-login `POST /complaints` (validation 422, duplicates return the existing case, unknown customer 422), `GET /cases/{id}` (processing / done with `self_check`, `case_state`, `sent`, `human_action`), `POST /cases/{id}/actions` (approve / reject / edit_approve, edited replies self-checked), `GET /health`; the worker handles 8 complaints at once and never reprocesses a stored case. `scoring/api_check.py` with 20 training complaints at once, LLM on: **score 100.0, 20/20 states, 9/9 probes, slowest 22.9 s** (limit 120 s). Tests in `tests/test_api_contract.py`
+- [ ] **Make the API reachable** from another laptop on the venue Wi-Fi (`--host 0.0.0.0`, firewall, laptop IP) or through a tunnel; test it from a teammate's laptop before Checkpoint 2
+- [ ] Optional: the dashboard's Approve / Reject could call `POST /cases/{id}/actions` (same rules as now: both go through `store.approve` / `store.reject`)
 - [ ] Live-round test set: ~10 tricky complaints written fresh **as CSV rows in that format** (Malay, mixed, call-centre note, 65+, > RM500, scam, ambiguous). Rehearse feeding them in
 - [ ] Test predictions early: `run_batch --split test --team <team-name>`, then a PR from our fork to the original repo titled `Submission: <team-name>`, well before 15:00 Day 2. Re-run as A and B improve
 
@@ -163,8 +168,9 @@ A separate award, see [docs/bonus_platform.md](docs/bonus_platform.md) and the s
 
 ### Shared milestones
 - [ ] **Day 1, 16:00, Checkpoint 1:** classifies and finds the right transaction for 20 training complaints (the skeleton already does)
-- [ ] **Day 2, 12:00, Checkpoint 2:** full workflow on 50 training complaints with the LLM on; training score posted (B: LLM on; C: app runs)
-- [ ] **Day 2, 15:00:** predictions submitted, code freeze
+- [ ] **Day 2, 12:00, Checkpoint 2:** full workflow on 50 training complaints with the LLM on; training score posted; `scoring/api_check.py` passes against our API, and the organisers can reach it from their laptop
+- [ ] **Day 2, 15:00, agent and API freeze:** PR with the predictions, the **freeze commit hash** and the **API URL**; the API stays running until our demo ends (the hidden test runs 15:00–15:45)
+- [ ] **Day 2, 16:30:** demos, about 10 minutes (presentation, human gate with 3 complaints, ops platform if built). UI and ops platform can change until then
 
 ## Frontend: Streamlit or React
 
@@ -178,9 +184,10 @@ The React app is only a client of `app/api.py`. The agent, worker and store don'
 
 | UI need | Endpoint |
 |---|---|
-| Submit a complaint | `POST /complaints` → `{complaint_id}`, then poll `GET /cases/{id}` until it returns 200 |
+| Submit a complaint | `POST /complaints` with all six fields → `202 processing`; poll `GET /cases/{id}` until `status` is `done` (no login) |
 | Approval / fraud queue | `GET /cases?status=PENDING_APPROVAL` / `GET /cases?status=FRAUD_QUEUE` |
-| Case detail (decision, evidence, trace, audit log) | `GET /cases/{id}` |
+| Case detail (decision, evidence, trace, audit log) | `GET /cases/{id}/record` (login); `GET /cases/{id}` is the contract view (decision, `case_state`, `sent`, `human_action`) |
+| Approve / reject, as the live round does | `POST /cases/{id}/actions` with `{action, actor, reason, reply_text?}` (no login) |
 | Approve / reject | `POST /cases/{id}/approve` / `POST /cases/{id}/reject` with `{officer, reply_text?, note?}`. Approve returns `422` with `detail.problems` when the reply fails the self-check (nothing is sent) |
 | Queue counts | `GET /stats` |
 | Awaiting customer / customer's answer | `GET /cases?status=AWAITING_CUSTOMER` / `POST /cases/{id}/messages` with `{text}` |
@@ -195,7 +202,7 @@ If C doesn't know React well, spend that day on Streamlit styling, the live-roun
 
 - **Code decides money.** No LLM output ever sets outcome, refund, priority or route.
 - **Branches:** `a/...`, `b/...`, `c/...` → PR into `main`. Run the tests and a train run before merging, and post the score in the PR.
-- **Test predictions early.** `python -m scripts.run_batch --split test --team <team-name>` writes `submissions/<team-name>/predictions.csv`. Submit with a PR from our fork to `DM-Data-Science/teratai-complaints-hackathon`, titled `Submission: <team-name>`, before 15:00 on Day 2. It only needs the predictions file.
+- **Test predictions early.** `python -m scripts.run_batch --split test --team <team-name>` writes `submissions/<team-name>/predictions.csv`. Submit with a PR from our fork to `DM-Data-Science/teratai-complaints-hackathon`, titled `Submission: <team-name>`, before 15:00 on Day 2. It only needs the predictions file; its description must give the **freeze commit hash** (our last commit at 15:00) and the **API URL**.
 - **Keep up with the original repo.** It may get clarifications (never data changes). To bring them in: `git fetch upstream`, then `git merge upstream/main` on `main` and push (or use GitHub's **Sync fork** button). The `upstream` remote points at `DM-Data-Science/teratai-complaints-hackathon`; add it with `git remote add upstream https://github.com/DM-Data-Science/teratai-complaints-hackathon.git` if your clone lacks it.
 - **No keys in the repo.** No hand-labelling of test complaints.
 

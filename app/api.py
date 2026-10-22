@@ -1,27 +1,37 @@
 """Owner: C. HTTP intake and queue API.
 
-    uvicorn app.api:app --reload --port 8000      (docs at http://localhost:8000/docs)
+    uvicorn app.api:app --host 0.0.0.0 --port 8000     (docs at http://localhost:8000/docs; needs python -m app.worker)
 
-POST /complaints drops the complaint into inbox/; the worker (python -m app.worker) picks it up.
+The organisers' contract (docs/api.md), open with no login because the live round calls it without credentials:
+    POST /complaints                  one complaint (the six fields of a complaints.csv row) -> 202 processing
+    GET  /cases/{id}                  processing / done with the decision, self_check, case_state, sent, human_action
+    POST /cases/{id}/actions          approve / reject / edit_approve a case awaiting approval (actor + reason)
+    GET  /health
+POST /complaints drops the complaint into inbox/; the worker picks it up, several at a time. Check this service the way
+the live round will: python scoring/api_check.py http://localhost:8000
 
-Access control (app/UserAccessControl): log in at POST /auth/login and send the token as a Bearer header.
-The case endpoints show each role only its own cases: officer HUMAN_APPROVAL, fraud FRAUD_TEAM, manager all,
-customer their own (and only the messages actually sent). Intake (POST /complaints and customer replies) stays open.
+Everything else needs a login (app/UserAccessControl: POST /auth/login, then a Bearer token) and shows each role only
+its own cases: officer HUMAN_APPROVAL, fraud FRAUD_TEAM, manager all, customer their own (and only messages sent).
+That includes GET /cases/{id}/record, the full case with evidence and audit log.
 """
+import datetime as dt
 import os
-from typing import Optional
+import re
+import threading
+from typing import Literal, Optional
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from agent.summary import case_summary
-from app import store
+from app import contract, store
 from app.UserAccessControl import roles
-from app.UserAccessControl.accounts import Account
+from app.UserAccessControl.accounts import Account, get_customer
 from app.UserAccessControl.deps import require_roles
 from app.UserAccessControl.routes import router as auth_router
-from app.worker import submit, submit_reply
+from app.worker import inbox_state, submit, submit_reply
 
 app = FastAPI(title="Teratai complaints agent")
 app.include_router(auth_router)
@@ -37,12 +47,13 @@ app.add_middleware(
 
 
 class ComplaintIn(BaseModel):
+    """The six fields of a complaints.csv row (docs/api.md). A missing field is a 422 from FastAPI itself."""
+    complaint_id: str
     customer_id: str
+    received_at: str                       # "YYYY-MM-DD HH:MM": dates in the text are read from this, not today
     text: str
-    channel: str = "App chat"
+    channel: str = ""
     subject: str = ""
-    received_at: Optional[str] = None      # "YYYY-MM-DD HH:MM"; defaults to now
-    complaint_id: Optional[str] = None
 
 
 class ApprovalIn(BaseModel):       # the actor is the signed-in user, not a field
@@ -50,10 +61,44 @@ class ApprovalIn(BaseModel):       # the actor is the signed-in user, not a fiel
     note: str = ""
 
 
+SAFE_ID = re.compile(r"[A-Za-z0-9._-]{1,64}")    # the id becomes a file name in inbox/
+_intake = threading.Lock()                       # check-then-submit, so a double POST can't make two cases
+
+
+def _status_of(complaint_id: str) -> Optional[str]:
+    if store.get_case(complaint_id):
+        return "done"
+    state = inbox_state(complaint_id)
+    return state[0] if state else None
+
+
 @app.post("/complaints", status_code=202)
 def create_complaint(body: ComplaintIn):
-    cid = submit({k: v for k, v in body.model_dump().items() if v is not None})
-    return {"complaint_id": cid, "status": "QUEUED"}
+    """Contract intake. The same complaint_id again returns the existing case's status (200): no second case."""
+    c = {k: v.strip() for k, v in body.model_dump().items()}
+    for field in ("complaint_id", "customer_id", "received_at", "text"):
+        if not c[field]:
+            raise HTTPException(422, f"{field} is empty")
+    if not SAFE_ID.fullmatch(c["complaint_id"]) or c["complaint_id"].startswith("."):
+        raise HTTPException(422, "complaint_id may only use letters, digits, '.', '_' and '-' (up to 64)")
+    try:
+        dt.datetime.strptime(c["received_at"][:16], "%Y-%m-%d %H:%M")
+    except ValueError:
+        raise HTTPException(422, "received_at must be 'YYYY-MM-DD HH:MM'")
+    if get_customer(c["customer_id"]) is None:
+        raise HTTPException(422, f"unknown customer {c['customer_id']}")
+    c["text"] = body.text                       # keep the customer's own spacing and line breaks
+    with _intake:
+        status = _status_of(c["complaint_id"])
+        if status:
+            return JSONResponse({"complaint_id": c["complaint_id"], "status": status}, status_code=200)
+        submit(c)
+    return {"complaint_id": c["complaint_id"], "status": "processing"}
+
+
+@app.get("/health")
+def health():
+    return {"ok": True}
 
 
 class CustomerReplyIn(BaseModel):
@@ -90,9 +135,57 @@ def cases(status: Optional[str] = None, limit: int = 200, user: Account = Depend
 
 
 @app.get("/cases/{complaint_id}")
-def case(complaint_id: str, user: Account = Depends(require_roles(*roles.ALL_ROLES))):
-    """The full case, plus `summary`: the at-a-glance view the dashboard shows first (agent/summary.py).
-    A customer gets only roles.customer_view: no decision internals, no unsent draft."""
+def case(complaint_id: str):
+    """Contract view (docs/api.md), no login: processing, error, or done with the decision and where the case is."""
+    c = store.get_case(complaint_id)
+    if c:
+        return contract.case_view(c)
+    state = inbox_state(complaint_id)
+    if state is None:
+        raise HTTPException(404, "unknown complaint")
+    status, why = state
+    return {"complaint_id": complaint_id, "status": status, **({"error": why} if why else {})}
+
+
+class ActionIn(BaseModel):
+    action: Literal["approve", "reject", "edit_approve"]     # anything else: 422
+    actor: str
+    reason: str = ""
+    reply_text: Optional[str] = None
+
+
+@app.post("/cases/{complaint_id}/actions")
+def act(complaint_id: str, body: ActionIn):
+    """Contract: a person acts on a case awaiting approval. An edited reply must pass the self-check (else 422,
+    nothing sent). The agent's decision never changes; the action is stored as human_action."""
+    c = store.get_case(complaint_id)
+    if c is None:
+        raise HTTPException(404, "unknown complaint")
+    if contract.STATE.get(c["status"], ("",))[0] != "awaiting_approval":
+        raise HTTPException(409, f"case is {contract.STATE.get(c['status'], (c['status'],))[0]}, not awaiting_approval")
+    if not body.actor.strip():
+        raise HTTPException(422, "actor is required")
+    if body.action in ("reject", "edit_approve") and not body.reason.strip():
+        raise HTTPException(422, f"reason is required for {body.action}")
+    if body.action == "edit_approve" and not (body.reply_text or "").strip():
+        raise HTTPException(422, "reply_text is required for edit_approve")
+    try:
+        if body.action == "reject":
+            store.reject(complaint_id, body.actor.strip(), body.reason.strip())
+        else:
+            store.approve(complaint_id, body.actor.strip(), body.reply_text if body.action == "edit_approve" else None,
+                          reason=body.reason.strip())
+    except store.ReplyCheckFailed as e:          # nothing sent: the edited reply invents something
+        raise HTTPException(422, {"error": "edited reply failed the self-check", "problems": e.problems})
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+    return contract.case_view(store.get_case(complaint_id))
+
+
+@app.get("/cases/{complaint_id}/record")
+def case_record(complaint_id: str, user: Account = Depends(require_roles(*roles.ALL_ROLES))):
+    """The full case (evidence, trace, audit log), plus `summary`: the at-a-glance view the dashboard shows first
+    (agent/summary.py). Staff login. A customer gets only roles.customer_view: no decision internals, no unsent draft."""
     c = _visible_case(complaint_id, user)
     if user.role == roles.CUSTOMER:
         return roles.customer_view(c)

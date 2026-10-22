@@ -26,6 +26,22 @@ POLL_SECONDS = 1.0
 # The backfill uses rules and templates only: 2,500 past complaints through the LLM would be slow and costly.
 # BACKFILL_LLM=1 sends them through the LLM too, when it is on. Live complaints always follow LLM_PROVIDER.
 BACKFILL_LLM = os.environ.get("BACKFILL_LLM", "") == "1"
+BACKFILL = os.environ.get("BACKFILL", "1") != "0"     # BACKFILL=0: start with only what arrives (testing, a clean demo)
+# Complaints handled at the same time. The live round sends 20 at once and allows 120 s each; one at a time, the
+# last would wait for the 19 before it (~5 s each with the LLM).
+WORKERS = int(os.environ.get("WORKERS", 8))
+
+
+def inbox_state(complaint_id: str):
+    """("processing", None) while a complaint waits in or is being worked from inbox/, ("error", why) if it failed
+    there, else None. The API reports these before the case reaches the store."""
+    if (INBOX / f"{complaint_id}.json").exists():
+        return "processing", None
+    failed = INBOX / "failed" / f"{complaint_id}.error.txt"
+    if failed.exists():
+        lines = [x for x in failed.read_text(encoding="utf-8", errors="replace").splitlines() if x.strip()]
+        return "error", (lines[-1] if lines else "failed")
+    return None
 
 
 def submit(complaint: dict) -> str:
@@ -62,6 +78,9 @@ def handle(path: Path):
             raise ValueError(f"{c['in_reply_to']} is not waiting for a customer reply")
         store.log(c["in_reply_to"], "customer", "customer_replied", c["text"])
         c = follow_up_complaint(case["record"]["complaint"], c["text"])
+    elif store.get_case(c["complaint_id"]):          # already decided: never reprocess (the same complaint posted twice)
+        print(f"{c['complaint_id']}: already a case, not reprocessed", flush=True)
+        return
     rec = process_complaint(c)
     store.save_case(rec)
     d = rec.decision
@@ -76,6 +95,8 @@ def backfill():
     from agent.pipeline import process_complaint
     from app import store
 
+    if not BACKFILL:
+        return
     done = store.case_ids()
     known = list(tools.get_db().complaints.items())       # a snapshot: live complaints get registered meanwhile
     todo = sorted((c for cid, c in known if cid not in done),
@@ -112,16 +133,25 @@ def main():
     print("loading data...", flush=True)
     tools.get_db()
     threading.Thread(target=backfill, name="backfill", daemon=True).start()
-    print(f"watching {INBOX} (Ctrl+C to stop)", flush=True)
+    print(f"watching {INBOX}, {WORKERS} at a time (Ctrl+C to stop)", flush=True)
+    pool, busy = ThreadPoolExecutor(WORKERS), set()
+
+    def run(path: Path):
+        try:
+            handle(path)
+            path.replace(INBOX / "processed" / path.name)
+        except Exception:  # noqa: BLE001
+            (INBOX / "failed" / (path.stem + ".error.txt")).write_text(traceback.format_exc(), encoding="utf-8")
+            path.replace(INBOX / "failed" / path.name)
+            print(f"FAILED {path.name}, see inbox/failed/", flush=True)
+        finally:
+            busy.discard(path.name)
+
     while True:
         for path in sorted(INBOX.glob("*.json")):
-            try:
-                handle(path)
-                path.replace(INBOX / "processed" / path.name)
-            except Exception:  # noqa: BLE001
-                (INBOX / "failed" / (path.stem + ".error.txt")).write_text(traceback.format_exc(), encoding="utf-8")
-                path.replace(INBOX / "failed" / path.name)
-                print(f"FAILED {path.name}, see inbox/failed/", flush=True)
+            if path.name not in busy:                    # still in inbox/ while being worked on: don't take it twice
+                busy.add(path.name)
+                pool.submit(run, path)
         time.sleep(POLL_SECONDS)
 
 

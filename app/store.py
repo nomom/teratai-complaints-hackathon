@@ -146,7 +146,7 @@ def recheck(case_row, text):
     return checks.check(rec["complaint"], Decision(**rec["decision"]), text, case_row["reply_language"])
 
 
-def approve(complaint_id, officer, reply_text=None):
+def approve(complaint_id, officer, reply_text=None, reason=""):
     """Officer approves (optionally edits) the reply; only now does it count as sent.
 
     The self-check runs again on the exact text going out, edited or not: an officer's reply is held to the same
@@ -167,6 +167,9 @@ def approve(complaint_id, officer, reply_text=None):
             decided = bool(row["outcome"])
             con.execute("UPDATE cases SET status=?, reply_text=?, updated_at=? WHERE complaint_id=?",
                         ("APPROVED" if decided else "AWAITING_CUSTOMER", text, _now(), complaint_id))
+            audit(con, complaint_id, officer, "human_action", {"action": "edit_approve" if reply_text else "approve",
+                                                               "actor": officer, "reason": reason, "at": _now(),
+                                                               "reply_text": text})
             audit(con, complaint_id, officer, "approved", "edited" if reply_text else "as drafted")
             audit(con, complaint_id, officer, "reply_sent" if decided else "question_sent", text)
             return
@@ -182,6 +185,14 @@ def reject(complaint_id, officer, note=""):
             raise ValueError(f"{complaint_id} is not waiting for approval")
         con.execute("UPDATE cases SET status='REJECTED', updated_at=? WHERE complaint_id=?", (_now(), complaint_id))
         audit(con, complaint_id, officer, "rejected", note)
+        audit(con, complaint_id, officer, "human_action", {"action": "reject", "actor": officer, "reason": note,
+                                                           "at": _now(), "reply_text": None})
+
+
+def human_action(case):
+    """The latest approve / reject on a case, as docs/api.md shows it (None until a person acts)."""
+    acts = [a for a in case.get("audit", []) if a["action"] == "human_action"]
+    return json.loads(acts[-1]["detail"]) if acts else None
 
 
 def counts(route=None, customer_id=None):

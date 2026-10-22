@@ -1,6 +1,6 @@
 # End goal
 
-What we hand in at 15:00 on Day 2, and what the judges see at 15:15. Who does what is in [TEAM.md](TEAM.md).
+What we hand in at 15:00 on Day 2 (the agent and API freeze), and what the judges see at 16:30. Who does what is in [TEAM.md](TEAM.md).
 
 **Four deliverables:** a working app, a predictions file, a repo, and an 8-minute demo.
 
@@ -8,7 +8,7 @@ What we hand in at 15:00 on Day 2, and what the judges see at 15:15. Who does wh
 
 ## 1. A working app
 
-It runs on a laptop as two processes: `python -m app.worker` and the dashboard (Streamlit, or React if we switch). Officers use the dashboard. In the live round, judges hand us 2 or 3 new complaints as `complaints.csv` rows, and we feed them in through the same intake with no code changes.
+It runs on a laptop as three processes: `python -m app.worker`, the API (`uvicorn app.api:app --host 0.0.0.0 --port 8000`) and the dashboard. Officers use the dashboard. **The live round talks to the API** ([docs/api.md](docs/api.md)): the organisers' script and the judges POST complaints to it with no login, read the decision back, and approve through it.
 
 | Screen | What it does |
 |---|---|
@@ -56,14 +56,12 @@ A case's status says where it is, separately from what was decided.
 
 ### What it looks like in the live round
 
-The judges give us 2 or 3 complaints written for the event, each in the same format as a row of `complaints.csv` (see the README, "The live round"):
+Two parts, both through our API (README, "The live round"; [docs/api.md](docs/api.md)):
 
-```
-complaint_id,customer_id,received_at,channel,subject,text
-LIVE-07,CUS-01234,2026-09-30 10:15,App chat,,"Hi, I was charged twice at ShopLah Online today for RM89.90..."
-```
+- **Hidden test (15 points, 15:00–15:45):** the organisers' `scoring/api_check.py` sends **20 unseen, messily written complaints** (typos, SMS short forms, emoji, mixed English and Malay) all at once, scores them like the leaderboard, and runs probes (health, unknown case, missing text, unknown customer, a duplicate, approval holding, an edited reply with an invented amount refused). 120 s allowed per complaint. Our own run of the same script: **100.0, 20/20 states, 9/9 probes, slowest 22.9 s**.
+- **Human gate (10 points, in the demo):** judges send 3 complaints one at a time; we show each appear on its own in the dashboard with the matched transaction, evidence, decision, route, reply and self-check; an approval case waits until we approve it (the API shows `case_state: awaiting_approval`, `sent: false` until then), and a fraud case lands in the fraud queue.
 
-IDs run `LIVE-01`, `LIVE-02`, ...; `received_at` is on 30 Sep 2026, the last day of the data; the customer and transaction already exist. We take each one in through the intake (form, `POST /complaints`, or a file in `inbox/`). The system processes it on its own and shows the case record with its evidence, route and reply. Cases needing approval wait for us to approve them on screen.
+Each complaint is the six fields of a `complaints.csv` row as JSON (`examples/live_complaint_example.json`), with its own `received_at`.
 
 The examples below are real training complaints in that shape, useful for rehearsal.
 
@@ -97,7 +95,7 @@ Why: the ATM journal shows RM1,500 requested and RM950 dispensed. The refund is 
 
 - `submissions/<team-name>/predictions.csv`: one row for each of the 750 test complaints, with all 9 columns including the reply
 - Produced by the same workflow as the app (`python -m scripts.run_batch --split test --team <team-name>`), never by hand
-- Submitted as a pull request **from our fork** (`nomom/teratai-complaints-hackathon`) to the original repo (`DM-Data-Science/teratai-complaints-hackathon`), titled `Submission: <team-name>`, **before 15:00 on Day 2**. The PR only needs the predictions file; our code stays in the fork
+- Submitted as a pull request **from our fork** (`nomom/teratai-complaints-hackathon`) to the original repo (`DM-Data-Science/teratai-complaints-hackathon`), titled `Submission: <team-name>`, **before 15:00 on Day 2**. The PR only needs the predictions file; our code stays in the fork. Its description gives the **freeze commit hash** and the **API URL**, and the API keeps running until our demo ends
 - Always the agent's own output, never officer-corrected, even if we build the ops platform below
 - Training score: **99.96** today with the LLM off (it started at 92.16). Target: keep it there, and holding up on fresh wording in the live round, with zero critical errors (no wrongful refunds, no missed fraud)
 
@@ -111,15 +109,15 @@ Why: the ATM journal shows RM1,500 requested and RM950 dispensed. The refund is 
 
 ---
 
-## 4. The 8-minute demo
+## 4. The demo (16:30 on Day 2, about 10 minutes)
 
 | Time | What we show |
 |---|---|
 | 0:00–1:00 | The problem, and our design in one slide: **the LLM does language, code does money and rules** |
 | 1:00–3:00 | Our three examples above, one down each route, plus a Malay or mixed-language one |
-| 3:00–6:00 | **Live round:** judges give us 2 or 3 new complaints (`complaints.csv` rows); we feed them in, show the decision, the reasons and the queue each lands in, then approve one |
-| 6:00–7:00 | The self-check catching a bad reply |
-| 7:00–8:00 | Numbers: training score, accuracy per field, cost and seconds per complaint |
+| 3:00–7:00 | **Human gate:** the judges send 3 complaints to our API one at a time; each appears in the dashboard, we show the transaction, evidence, decision, route, reply and self-check, approve one, and show a fraud case in the fraud queue |
+| 7:00–8:00 | The self-check catching a bad reply (an officer's edit, and the agent's own draft with `scripts/demo_bad_drafts.py`) |
+| 8:00–10:00 | Numbers ([MODEL_EVAL.md](MODEL_EVAL.md)): training score, 14/14 on new wording vs 4/14 rules only, cost and seconds per complaint; ops platform if built |
 
 ## How the judges score us
 
