@@ -8,7 +8,7 @@ What we hand in at 15:00 on Day 2, and what the judges see at 15:15. Who does wh
 
 ## 1. A working app
 
-It runs on a laptop as two processes: `python -m app.worker` and the dashboard (Streamlit, or React if we switch). Officers use the dashboard. In the live round, judges hand us 2 or 3 new complaints as `complaints.csv` rows, and we feed them in through the same intake with no code changes.
+It runs on a laptop as three processes: `python -m app.worker`, the API (`uvicorn app.api:app`) and the React dashboard in `web/`. Officers use the dashboard. In the live round, judges hand us 2 or 3 new complaints as `complaints.csv` rows, and we feed them in through the same intake with no code changes.
 
 | Screen | What it does |
 |---|---|

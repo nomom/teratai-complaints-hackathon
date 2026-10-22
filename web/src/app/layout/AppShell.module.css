@@ -1,0 +1,29 @@
+.shell {
+  min-height: 100vh;
+}
+
+.main {
+  padding: var(--space-4);
+  max-width: 1400px;
+}
+
+.topBar {
+  display: none;
+}
+
+@media (min-width: 960px) {
+  .shell {
+    display: grid;
+    grid-template-columns: 280px minmax(0, 1fr);
+  }
+
+  .main {
+    padding: var(--space-6) var(--space-8) var(--space-8);
+  }
+
+  .topBar {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: var(--space-2);
+  }
+}

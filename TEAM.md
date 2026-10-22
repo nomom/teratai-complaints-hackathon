@@ -5,8 +5,8 @@
 One app, three owners. Every path (live demo, inbox, 750-complaint batch) runs the same `agent.pipeline.process_complaint()`.
 
 ```
-inbox/*.json ─► app/worker.py ─► agent/pipeline.py ─► app/store.py (SQLite) ─► app/ui.py (queues)
-  ▲  (API + UI drop files here)     │
+inbox/*.json ─► app/worker.py ─► agent/pipeline.py ─► app/store.py (SQLite) ─► app/api.py ─► web/ (React)
+  ▲  (the API drops files here)     │
   │                                 ├─ 1 UNDERSTAND  agent/extract.py   (B: LLM, rules fallback)
 app/api.py                          ├─ 2 FIND        agent/decision/matching.py  (A: code) + decision/dates.py
                                     ├─ 3 DECIDE      agent/decision/policy.py    (A: code)
@@ -27,7 +27,7 @@ The contracts between you are in `agent/schemas.py` (`Extraction`, `Decision`, `
 
 ## Setup
 
-One [uv](https://docs.astral.sh/uv/) project for the whole repo: `pyproject.toml` and `uv.lock` at the root pin the exact packages (`anthropic`, `openai`, `fastapi`, `uvicorn`, `streamlit`) and Python 3.12, so all three laptops run the same thing. Install uv once with `pip install uv`, or `powershell -c "irm https://astral.sh/uv/install.ps1 | iex"`.
+One [uv](https://docs.astral.sh/uv/) project for the whole repo: `pyproject.toml` and `uv.lock` at the root pin the exact packages (`anthropic`, `openai`, `fastapi`, `uvicorn`) and Python 3.12, so all three laptops run the same thing. Install uv once with `pip install uv`, or `powershell -c "irm https://astral.sh/uv/install.ps1 | iex"`. The dashboard is a React app in `web/` with its own `package-lock.json`; it needs Node.js 20.19 or newer.
 
 **Everyone, from the repo root:**
 
@@ -43,13 +43,15 @@ uv run python -m scripts.run_batch --split train     # train run + score + per-c
 
 ```powershell
 uv run python -m app.worker                          # terminal 1: reacts to new complaints
-uv run python -m streamlit run app/ui.py             # terminal 2: dashboard, http://localhost:8501
-uv run python -m uvicorn app.api:app --port 8000     # optional, terminal 3: API, docs at http://localhost:8000/docs
+uv run python -m uvicorn app.api:app --port 8000     # terminal 2: API, docs at http://localhost:8000/docs
+cd web; npm install; npm run dev                     # terminal 3: dashboard, http://localhost:5173 (npm install once)
 ```
+
+The dashboard calls the API through `/api`, which the Vite dev server forwards to port 8000, so there is nothing to configure. See [web/README.md](web/README.md) for its structure, tests and build.
 
 On start the worker also loads every complaint in `data/complaints.csv` that isn't in the case store yet (about 15 s for all 2,500, in the background, rules only; `BACKFILL_LLM=1` uses the LLM too). Cases already stored are never reprocessed, so a restart keeps officers' actions. To start over, delete `runtime/cases.db`.
 
-Both the dashboard and the API need a login (`app/UserAccessControl`). Staff: `officer1` (approval queue), `fraud1` (fraud queue), `manager1` (everything), password `1234`. Customers sign up with their customer ID (e.g. `CUS-00150`), then file complaints and follow their own cases. Sign-up adds a row (customer ID, name, password hash) to `data/customer_accounts.csv`, which is git-ignored, so each laptop has its own sign-ups; `data/customers.csv` is never changed.
+The dashboard needs a login (`app/UserAccessControl`, enforced by the API). Staff: `officer1` (approval queue), `fraud1` (fraud queue), `manager1` (everything), password `1234`. Customers sign up with their customer ID (e.g. `CUS-00150`), then file complaints and follow their own cases. Sign-up adds a row (customer ID, name, password hash) to `data/customer_accounts.csv`, which is git-ignored, so each laptop has its own sign-ups; `data/customers.csv` is never changed.
 
 Prefer an activated shell? `.\.venv\Scripts\Activate.ps1` (Windows) or `source .venv/bin/activate` (macOS/Linux), then drop the `uv run` prefix.
 
@@ -138,13 +140,13 @@ Goal: category and language near 100%; replies a bank would send; a self-check j
 ### C: platform and demo
 Goal: the live round works without a hitch; test predictions in early.
 
-- [ ] `uv sync` (see Setup), run the worker + UI (+ API) for the first time, fix what breaks (they haven't been run yet)
+- [x] `uv sync` (see Setup), run the worker + API + dashboard for the first time, fix what breaks
 - [ ] Push one complaint down each path: auto-resolved refund, decline → approval queue, refund > RM500 → approval queue, fraud → fraud queue. Approve and reject update the audit log
 - [x] *(done by B, please review)* `store.reject` now also refuses a case that isn't waiting in a queue (API `409`). `store.approve` re-runs the self-check on the exact reply going out, edited or not. A failing reply is not sent: `ReplyCheckFailed` (API: `422` with the problems; dashboard: an error under the button), and an `approval_blocked` audit entry. The agent's original draft stays in the case record
 - [x] *(done by B, please review)* Case page rebuilt around `agent/summary.py`: why it is in this queue, what happened, the decision, the one transaction that proves it, then the reply and buttons. Full evidence (customer, account, fee schedule row, journal, dates, policy settings), how the agent decided (reasons, what it read, reply source and rejected drafts, steps, cost) and the audit log are collapsed below. `GET /cases/{id}` returns the same `summary` for a React app
 - [x] *(done by B, please review)* **Resolved automatically** page (read-only spot-check of replies no person approved, with a "flagged only" toggle); **All cases** filter by status or "flagged for review", click a row to open it; **Flag for review** on any sent case (audit entry `flagged_for_review`, changes nothing; API `POST /cases/{id}/flag`). `GET /cases?status=` takes several statuses, comma-separated
-- [ ] *Optional, decide at Checkpoint 2:* a React frontend (see "Frontend: Streamlit or React" below)
-- [ ] **Live-round intake:** judges hand us `complaints.csv` rows (`complaint_id, customer_id, received_at, channel, subject, text`, IDs `LIVE-01`…, received on 30 Sep 2026), which must go in with no code changes. The API takes all six fields, and the Streamlit form now has `Complaint ID` and `Subject` too. Still to do: a "paste a CSV row" box (or a script that drops a CSV file's rows into `inbox/`)
+- [x] React frontend in `web/` replaces the Streamlit dashboard (see "Frontend" below)
+- [ ] **Live-round intake:** judges hand us `complaints.csv` rows (`complaint_id, customer_id, received_at, channel, subject, text`, IDs `LIVE-01`…, received on 30 Sep 2026), which must go in with no code changes. The API takes all six fields, and the dashboard's Submit complaint page has `Complaint ID` and `Subject` too. Still to do: a "paste a CSV row" box (or a script that drops a CSV file's rows into `inbox/`)
 - [ ] Live-round test set: ~10 tricky complaints written fresh **as CSV rows in that format** (Malay, mixed, call-centre note, 65+, > RM500, scam, ambiguous). Rehearse feeding them in
 - [ ] Test predictions early: `run_batch --split test --team <team-name>`, then a PR from our fork to the original repo titled `Submission: <team-name>`, well before 15:00 Day 2. Re-run as A and B improve
 
@@ -164,30 +166,26 @@ A separate award, see [docs/bonus_platform.md](docs/bonus_platform.md) and the s
 - [ ] **Day 2, 12:00, Checkpoint 2:** full workflow on 50 training complaints with the LLM on; training score posted (B: LLM on; C: app runs)
 - [ ] **Day 2, 15:00:** predictions submitted, code freeze
 
-## Frontend: Streamlit or React
+## Frontend: React (`web/`)
 
-Streamlit (`app/ui.py`) is the safety net and must work first. A React app is optional polish, worth it only if C knows React well.
+The dashboard is a React + TypeScript app (Vite) in `web/`, and it is only a client of `app/api.py`: the agent, worker and store don't depend on it, so A and B aren't affected by UI work. Structure, scripts and tests: [web/README.md](web/README.md).
 
-1. **Day 1:** Streamlit works end to end (C's first three to-dos).
-2. **Day 1 evening, optional:** build React (Vite) in `web/` against the existing API. Keep Streamlit as the fallback.
-3. **Day 2, 12:00:** demo React only if submit, approve and the fraud queue all work reliably in it. Otherwise demo Streamlit.
-
-The React app is only a client of `app/api.py`. The agent, worker and store don't change, so A and B aren't affected.
+Every request carries the signed-in user's token (`Authorization: Bearer ...` from `POST /auth/login`), and the API applies the role rules, so the UI hiding a page is never the only guard.
 
 | UI need | Endpoint |
 |---|---|
-| Submit a complaint | `POST /complaints` → `{complaint_id}`, then poll `GET /cases/{id}` until it returns 200 |
-| Approval / fraud queue | `GET /cases?status=PENDING_APPROVAL` / `GET /cases?status=FRAUD_QUEUE` |
-| Case detail (decision, evidence, trace, audit log) | `GET /cases/{id}` |
-| Approve / reject | `POST /cases/{id}/approve` / `POST /cases/{id}/reject` with `{officer, reply_text?, note?}`. Approve returns `422` with `detail.problems` when the reply fails the self-check (nothing is sent) |
-| Queue counts | `GET /stats` |
-| Awaiting customer / customer's answer | `GET /cases?status=AWAITING_CUSTOMER` / `POST /cases/{id}/messages` with `{text}` |
+| Log in / who am I | `POST /auth/login` → `{access_token, user}` / `GET /auth/me` |
+| Customer sign-up | `POST /auth/signup/verify` `{customer_id}`, then `POST /auth/signup` `{customer_id, password}` |
+| Queues and lists | `GET /cases?status=A,B&limit=N`: the role's cases, newest first, without the full record, plus `flagged` |
+| Sidebar counts | `GET /cases/counts`: per status, the role's cases only |
+| Case detail (summary, decision, evidence, trace, audit log) | `GET /cases/{id}`; a customer gets only what was sent to them. `403` for another team's case, with `detail.route` for staff |
+| Approve / reject / flag | `POST /cases/{id}/approve` `{reply_text?}` (`422` with `detail.problems` when the reply fails the self-check; nothing is sent), `/reject`, `/flag` `{note}`. The actor is the signed-in user |
+| Staff intake | `POST /complaints` → `{complaint_id}`, then poll `GET /cases/{id}` until it returns 200 |
+| Customer files / answers | `POST /me/complaints` `{text, subject}` (under their own ID) / `POST /cases/{id}/messages` `{text}` |
 
-Statuses: open `AWAITING_CUSTOMER`, `PENDING_APPROVAL`, `FRAUD_QUEUE`; closed `RESOLVED`, `APPROVED`, `REJECTED`, `ANSWERED` (see `agent/schemas.py`). An `AWAITING_CUSTOMER` case has no decision yet: `outcome`, `route`, `matched_txn_id` and `refund_amount_myr` are `null`, so show "-". The message thread is in the case's `audit` list.
+Statuses: open `AWAITING_CUSTOMER`, `PENDING_APPROVAL`, `FRAUD_QUEUE`; closed `RESOLVED`, `APPROVED`, `REJECTED`, `ANSWERED` (see `agent/schemas.py`). An `AWAITING_CUSTOMER` case has no decision yet: `outcome`, `route`, `matched_txn_id` and `refund_amount_myr` are `null`, so show "-".
 
-CORS already allows `http://localhost:5173` (Vite) and `http://localhost:3000`. Set `CORS_ORIGINS` (comma-separated) for other origins. A React demo needs three processes: `python -m app.worker`, `uvicorn app.api:app --port 8000`, and `npm run dev` in `web/`.
-
-If C doesn't know React well, spend that day on Streamlit styling, the live-round test set and demo rehearsal instead.
+In development the Vite server forwards `/api` to the API (`API_TARGET`, default `http://localhost:8000`), so CORS isn't involved. CORS still allows `http://localhost:5173` and `http://localhost:3000` for other setups; set `CORS_ORIGINS` (comma-separated) to change it.
 
 ## Rules of the road
 

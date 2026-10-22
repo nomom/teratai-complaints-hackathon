@@ -1,4 +1,4 @@
-"""Owner: B. The case at a glance, in plain English, for the officer's screen (Streamlit today, any frontend later).
+"""Owner: B. The case at a glance, in plain English, for the officer's screen (the React dashboard, via GET /cases/{id}).
 
     case_summary(record, status) -> {headline, why_here, story, decision, key_row, warnings, tone}
 
