@@ -156,6 +156,42 @@ class Contract(unittest.TestCase):
         r = self.api.post("/cases/CMP-00387/actions", json={"action": "approve", "actor": "x", "reason": "y"})
         self.assertEqual(r.status_code, 409)
 
+    def test_overloaded_intake_says_busy_instead_of_timing_out(self):
+        from app import api
+        with mock.patch.object(api, "MAX_BACKLOG", 2):
+            for i in (1, 2):
+                self.assertEqual(self.api.post("/complaints", json={**ATM, "complaint_id": f"Q-{i}"}).status_code, 202)
+            r = self.api.post("/complaints", json={**ATM, "complaint_id": "Q-3"})
+            self.assertEqual((r.status_code, r.headers.get("Retry-After")), (503, "15"))
+            self.assertFalse((self.inbox / "Q-3.json").exists())                  # nothing half-accepted
+            dup = self.api.post("/complaints", json={**ATM, "complaint_id": "Q-1"})  # a known one still answers
+            self.assertEqual((dup.status_code, dup.json()["status"]), (200, "processing"))
+            self.work()                                                            # the queue drains
+            self.assertEqual(self.api.post("/complaints", json={**ATM, "complaint_id": "Q-3"}).status_code, 202)
+
+    def test_case_store_uses_wal_and_a_cheap_existence_check(self):
+        self.decided()
+        with store.connect() as con:
+            self.assertEqual(con.execute("PRAGMA journal_mode").fetchone()[0].lower(), "wal")
+        self.assertEqual((store.has_case("CMP-00244"), store.has_case("NOPE")), (True, False))
+
+    def test_customer_id_in_any_case_is_normalised(self):
+        self.assertEqual(self.api.post("/complaints", json={**ATM, "customer_id": "cus-02394"}).status_code, 202)
+        self.work()
+        self.assertEqual(self.api.get("/cases/CMP-00244").json()["matched_txn_id"], "TXN-0088211")   # decided, no error
+
+    def test_worker_job_outcomes(self):
+        busy = {"CMP-00244.json", "GONE.json", "BAD.json"}
+        worker.submit(ATM)
+        worker.run(self.inbox / "CMP-00244.json", busy)                       # normal: decided, moved to processed/
+        self.assertTrue((self.inbox / "processed" / "CMP-00244.json").exists())
+        worker.run(self.inbox / "GONE.json", busy)          # handed out twice, already finished: not a failure
+        self.assertEqual(list((self.inbox / "failed").iterdir()), [])
+        (self.inbox / "BAD.json").write_text("{not json", encoding="utf-8")
+        worker.run(self.inbox / "BAD.json", busy)                              # a real failure is still recorded
+        self.assertEqual(sorted(p.name for p in (self.inbox / "failed").iterdir()), ["BAD.error.txt", "BAD.json"])
+        self.assertEqual(busy, set())                                          # every job released its file
+
     def staff_token(self):
         from app.UserAccessControl import accounts, auth
         for target, name, value in ((accounts, "STAFF_CSV", ROOT / "data" / "staff.csv"),

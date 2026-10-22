@@ -10,6 +10,7 @@ On start it also backfills: every complaint in data/complaints.csv that isn't in
 the background, so customers see their history and the queues are full without a separate batch run.
 """
 import datetime as dt
+import itertools
 import json
 import os
 import threading
@@ -19,17 +20,29 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import nullcontext
 from pathlib import Path
+from typing import Optional
 
 ROOT = Path(__file__).resolve().parent.parent
 INBOX = ROOT / "inbox"
-POLL_SECONDS = 1.0
+POLL_SECONDS = 0.5
 # The backfill uses rules and templates only: 2,500 past complaints through the LLM would be slow and costly.
 # BACKFILL_LLM=1 sends them through the LLM too, when it is on. Live complaints always follow LLM_PROVIDER.
 BACKFILL_LLM = os.environ.get("BACKFILL_LLM", "") == "1"
 BACKFILL = os.environ.get("BACKFILL", "1") != "0"     # BACKFILL=0: start with only what arrives (testing, a clean demo)
 # Complaints handled at the same time. The live round sends 20 at once and allows 120 s each; one at a time, the
-# last would wait for the 19 before it (~5 s each with the LLM).
-WORKERS = int(os.environ.get("WORKERS", 8))
+# last would wait for the 19 before it (~5 s each with the LLM). The work is mostly waiting on the LLM, so 16 threads
+# cost little; measured with 50 at once, OpenAI didn't rate-limit 8 (scripts/load_test.py).
+WORKERS = int(os.environ.get("WORKERS", 16))
+
+
+def backlog(limit: Optional[int] = None) -> int:
+    """Complaints waiting in inbox/ or being worked on (they stay there until done). With `limit`, stops counting
+    there: the API only needs to know whether the limit is reached, not scan thousands of files on every POST."""
+    if not INBOX.exists():
+        return 0
+    with os.scandir(INBOX) as entries:
+        waiting = (e for e in entries if e.name.endswith(".json") and not e.name.startswith("."))
+        return sum(1 for _ in itertools.islice(waiting, limit))
 
 
 def inbox_state(complaint_id: str):
@@ -139,24 +152,35 @@ def main():
     threading.Thread(target=backfill, name="backfill", daemon=True).start()
     print(f"watching {INBOX}, {WORKERS} at a time (Ctrl+C to stop)", flush=True)
     pool, busy = ThreadPoolExecutor(WORKERS), set()
-
-    def run(path: Path):
-        try:
-            handle(path)
-            path.replace(INBOX / "processed" / path.name)
-        except Exception:  # noqa: BLE001
-            (INBOX / "failed" / (path.stem + ".error.txt")).write_text(traceback.format_exc(), encoding="utf-8")
-            path.replace(INBOX / "failed" / path.name)
-            print(f"FAILED {path.name}, see inbox/failed/", flush=True)
-        finally:
-            busy.discard(path.name)
-
     while True:
         for path in sorted(INBOX.glob("*.json")):
             if path.name not in busy:                    # still in inbox/ while being worked on: don't take it twice
                 busy.add(path.name)
-                pool.submit(run, path)
+                pool.submit(run, path, busy)
         time.sleep(POLL_SECONDS)
+
+
+def run(path: Path, busy: set):
+    """Work one inbox file, then move it to processed/ (or failed/ with the error alongside).
+
+    The main loop lists inbox/ before checking `busy`, so a file finished between the two can be handed out again.
+    Such a file is gone by the time this runs: that is not a failure, there is nothing to do.
+    """
+    try:
+        try:
+            handle(path)
+        except FileNotFoundError:
+            if not path.exists():
+                return                                   # taken and finished by another thread meanwhile
+            raise
+        path.replace(INBOX / "processed" / path.name)
+    except Exception:  # noqa: BLE001
+        (INBOX / "failed" / (path.stem + ".error.txt")).write_text(traceback.format_exc(), encoding="utf-8")
+        if path.exists():
+            path.replace(INBOX / "failed" / path.name)
+        print(f"FAILED {path.name}, see inbox/failed/", flush=True)
+    finally:
+        busy.discard(path.name)
 
 
 if __name__ == "__main__":
