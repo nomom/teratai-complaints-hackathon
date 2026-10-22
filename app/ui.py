@@ -27,6 +27,7 @@ STATUS_WORDS = {"PENDING_APPROVAL": "Approval queue", "FRAUD_QUEUE": "Fraud queu
                 "ANSWERED": "Answered (off-topic)", "APPROVED": "Approved and sent", "REJECTED": "Rejected",
                 "SENT": "Resolved automatically (old)"}
 AUTO_SENT = ["RESOLVED", "ANSWERED", "SENT"]          # replies that went out with no person involved
+QUEUE_PAGE = {"PENDING_APPROVAL": "Approval queue", "FRAUD_QUEUE": "Fraud queue"}   # where a person acts on it
 
 page = st.sidebar.radio("Page", ["Submit complaint", "Approval queue", "Fraud queue", "Awaiting customer",
                                  "Resolved automatically", "All cases"])
@@ -54,6 +55,8 @@ def show_case(case, actions=False, headline=True):
         st.code(s["key_row"], language=None)
     if s["warnings"]:
         st.error("\n".join(f"- {w}" for w in s["warnings"]))
+    elif "DRAFT_REJECTED" in rec["decision"].get("flags", []):
+        st.caption("✓ The standard reply in the box passes the self-check (the agent's own drafts did not)")
     else:
         st.caption("✓ Reply checked: every transaction, amount and date in it belongs to this case's evidence")
 
@@ -75,6 +78,8 @@ def show_case(case, actions=False, headline=True):
             except ValueError as e:
                 st.error(str(e))
     else:
+        if case["status"] in QUEUE_PAGE:
+            st.info(f"Waiting in the **{QUEUE_PAGE[case['status']]}**: approve, edit or reject it there.")
         label = "Reply sent to the customer" if case["status"] in store.SENT_STATUSES else "Reply to the customer"
         st.text_area(label, case["reply_text"], height=180, disabled=True, key=f"r-{cid}")
         if case["status"] in store.SENT_STATUSES:

@@ -227,6 +227,12 @@ class Intents(LLMTestCase):
         self.assertIn("DRAFT_REJECTED", rec.decision.flags)
         self.assertNotIn("RM12,345.67", rec.reply_text)       # the officer starts from the template, which passes
         self.assertEqual(rec.check_problems, [])
+        steps = {t["step"]: t.get("detail") for t in rec.trace}  # every check records its own result
+        self.assertEqual([t["step"] for t in rec.trace if t["step"] not in ("understand", "route")],
+                         ["draft_reply", "check", "redraft", "recheck", "standard_reply", "check_standard_reply"])
+        self.assertTrue(steps["check"]["problems"] and steps["recheck"]["problems"])   # both failures visible
+        self.assertEqual((steps["standard_reply"], steps["check_standard_reply"]),
+                         ({"source": "template"}, {"problems": []}))
         reply_record = rec.decision.evidence["reply"]          # both rejected LLM drafts are kept for the audit
         self.assertEqual((reply_record["source"], [r["source"] for r in reply_record["rejected_drafts"]]),
                          ("template", ["llm", "llm"]))

@@ -77,18 +77,24 @@ def process_complaint(c: dict, oracle_category: str | None = None) -> CaseRecord
         trace[-1]["detail"] = {"source": source}
         return out, source
 
+    def check(name):
+        """Self-check the current reply; each check step records its own result in the trace."""
+        found = step(name, lambda: checks.check(c, decision, text, lang))
+        trace[-1]["detail"] = {"problems": found}
+        return found
+
     rejected = []                                  # drafts the self-check turned down, kept for the audit
     text, source = attempt("draft_reply")
-    problems = step("check", lambda: checks.check(c, decision, text, lang))
+    problems = check("check")
     if problems:                                   # redraft once with the problems as feedback (build guide step 5)
         rejected.append({"source": source, "text": text, "problems": problems})
         text, source = attempt("redraft", "; ".join(problems))
-        problems = step("recheck", lambda: checks.check(c, decision, text, lang))
+        problems = check("recheck")
         if problems:                               # failed twice: a person decides; the template is their starting point
             rejected.append({"source": source, "text": text, "problems": problems})
-            text, source = template(), "template"
-            problems = checks.check(c, decision, text, lang)
-    trace[-1]["detail"] = {"problems": problems}
+            text, source = step("standard_reply", template), "template"
+            trace[-1]["detail"] = {"source": "template"}
+            problems = check("check_standard_reply")
     decision.evidence["reply"] = {"source": source, "language": lang,
                                   "language_why": extract.reply_language_why(c, ex.language),
                                   "rejected_drafts": rejected}
