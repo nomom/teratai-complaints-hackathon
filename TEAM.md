@@ -27,17 +27,57 @@ The contracts between you are in `agent/schemas.py` (`Extraction`, `Decision`, `
 
 ## Setup
 
-```bash
-python -m unittest discover tests                    # core: stdlib only, no install needed
-python -m scripts.run_batch --split train            # full train run + score + per-category table (seconds, offline)
+| Person | Needs installed |
+|---|---|
+| A | Nothing: the core runs on plain Python 3.10+ |
+| B | `anthropic` (for the LLM): `uv venv`, then `uv pip install anthropic` |
+| C | Everything in `requirements.txt`: `anthropic`, `fastapi`, `uvicorn`, `streamlit` |
 
-pip install -r requirements.txt                      # for the LLM and the app
-python -m app.worker                                 # terminal 1: reacts to new complaints
-streamlit run app/ui.py                              # terminal 2: submit / approval queue / fraud queue
-uvicorn app.api:app --port 8000                      # optional: HTTP intake, docs at /docs
+**Everyone:** check the core works (run from the repo root).
+
+```bash
+python -m unittest discover tests                    # stdlib only, no install needed
+python -m scripts.run_batch --split train            # train run + score + per-category table; ends with FINAL SCORE 92.16
 ```
 
-LLM on: set `LLM_PROVIDER=anthropic` and `ANTHROPIC_API_KEY` in your shell (see `.env.example`). With it off, the rules and templates run and everything still works.
+**Person C: the app (Windows PowerShell, from the repo root)**
+
+We use [uv](https://docs.astral.sh/uv/). Install it once with `pip install uv`, or `powershell -c "irm https://astral.sh/uv/install.ps1 | iex"`.
+
+```powershell
+# 1. Virtual environment (once)
+uv venv                                              # creates .venv (git-ignored)
+.\.venv\Scripts\Activate.ps1
+uv pip install -r requirements.txt
+
+# 2. Terminal 1: the worker that reacts to new complaints
+python -m app.worker
+
+# 3. Terminal 2 (activate .venv again): the dashboard
+python -m streamlit run app/ui.py                    # http://localhost:8501
+
+# 4. Optional, terminal 3: the HTTP API
+python -m uvicorn app.api:app --port 8000            # docs at http://localhost:8000/docs
+```
+
+On macOS or Linux, activate with `source .venv/bin/activate`.
+
+You can also skip activation: prefix any command with `uv run --with-requirements requirements.txt`, e.g. `uv run --with-requirements requirements.txt python -m app.worker`.
+
+**LLM on:** set these in the shell that runs the worker or batch, before starting it (see `.env.example`). With them unset, the rules and templates run and everything still works.
+
+```powershell
+$env:LLM_PROVIDER = "anthropic"
+$env:ANTHROPIC_API_KEY = "sk-ant-..."                # never commit this
+```
+
+**Common snags**
+
+- **The activate script is blocked:** run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once, or use `uv run` and skip activation.
+- **`ModuleNotFoundError: agent` or `app`:** run commands from the repo root.
+- **The dashboard says "Not processed yet":** the worker (terminal 1) isn't running.
+- **A typed complaint finds no transaction:** keep the received time near the transaction date (the form defaults to 2026-09-30). Test first with the examples in [END_GOAL.md](END_GOAL.md).
+- **Code changes don't show up:** restart the worker after pulling.
 
 ## Where we start (offline, no LLM): train score 92.16
 
@@ -86,7 +126,7 @@ Goal: category and language near 100%; replies a bank would send; a self-check j
 ### C: platform and demo
 Goal: the live round works without a hitch; test predictions in early.
 
-- [ ] `pip install -r requirements.txt`, run the worker + UI (+ API) for the first time, fix what breaks (they haven't been run yet)
+- [ ] `uv pip install -r requirements.txt` (see Setup), run the worker + UI (+ API) for the first time, fix what breaks (they haven't been run yet)
 - [ ] Push one complaint down each path: auto-resolved refund, decline → approval queue, refund > RM500 → approval queue, fraud → fraud queue. Approve and reject update the audit log
 - [ ] Re-run the self-check on an officer's edited reply before it is sent (`TODO(C)` in `store.approve`)
 - [ ] Case page clearly shows why it decided, timing per step, and cost (engineering score)
