@@ -47,6 +47,8 @@ uv run python -m streamlit run app/ui.py             # terminal 2: dashboard, ht
 uv run python -m uvicorn app.api:app --port 8000     # optional, terminal 3: API, docs at http://localhost:8000/docs
 ```
 
+Both the dashboard and the API need a login (`app/UserAccessControl`). Staff: `officer1` (approval queue), `fraud1` (fraud queue), `manager1` (everything), password `1234`. Customers sign up with their customer ID (e.g. `CUS-00150`), then file complaints and follow their own cases. Sign-up writes the password hash into `data/customers.csv`: don't commit that change.
+
 Prefer an activated shell? `.\.venv\Scripts\Activate.ps1` (Windows) or `source .venv/bin/activate` (macOS/Linux), then drop the `uv run` prefix.
 
 **LLM on:** copy `.env.example` to `.env` at the repo root and fill in your provider and key. The worker, API, dashboard and batch load it on startup; restart them after editing it. `.env` is git-ignored, so never rename it or paste keys anywhere else. With no provider set, the rules and templates run and everything still works.

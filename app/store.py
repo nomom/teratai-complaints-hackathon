@@ -76,13 +76,19 @@ def log(complaint_id, actor, action, detail=""):
         audit(con, complaint_id, actor, action, detail)
 
 
-def list_cases(status=None, limit=200):
-    """Newest first. `status` is one status, a list of statuses, or None for all."""
+def list_cases(status=None, limit=200, route=None, customer_id=None):
+    """Newest first. `status` is one status, a list of statuses, or None for all.
+    `route` and `customer_id` narrow it further (access control passes them per role: roles.case_filter)."""
     statuses = [status] if isinstance(status, str) else list(status or [])
+    where = [f"status IN ({','.join('?' * len(statuses))})"] if statuses else []
+    args = list(statuses)
+    for column, value in (("route", route), ("customer_id", customer_id)):
+        if value:
+            where.append(f"{column} = ?")
+            args.append(value)
     with connect() as con:
-        where = f" WHERE status IN ({','.join('?' * len(statuses))})" if statuses else ""
-        q = f"SELECT * FROM cases{where} ORDER BY updated_at DESC LIMIT ?"
-        return [dict(r) for r in con.execute(q, (*statuses, limit))]
+        q = "SELECT * FROM cases" + (" WHERE " + " AND ".join(where) if where else "") + " ORDER BY updated_at DESC LIMIT ?"
+        return [dict(r) for r in con.execute(q, (*args, limit))]
 
 
 SENT_STATUSES = ("RESOLVED", "ANSWERED", "APPROVED", "SENT")     # the reply has gone out (SENT: before the rename)
@@ -173,6 +179,10 @@ def reject(complaint_id, officer, note=""):
         audit(con, complaint_id, officer, "rejected", note)
 
 
-def counts():
+def counts(route=None, customer_id=None):
+    """Cases per status; `route` or `customer_id` limit it to what one role may see (roles.case_filter)."""
+    filters = {k: v for k, v in (("route", route), ("customer_id", customer_id)) if v}
+    where = " WHERE " + " AND ".join(f"{k} = ?" for k in filters) if filters else ""
     with connect() as con:
-        return {r["status"]: r["n"] for r in con.execute("SELECT status, COUNT(*) n FROM cases GROUP BY status")}
+        return {r["status"]: r["n"] for r in con.execute(
+            f"SELECT status, COUNT(*) n FROM cases{where} GROUP BY status", tuple(filters.values()))}

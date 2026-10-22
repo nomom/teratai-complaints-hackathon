@@ -1,10 +1,15 @@
-"""Owner: C. Officer dashboard: submit a complaint, work the approval and fraud queues, see why each case was decided.
+"""Owner: C. Dashboard: log in, then each role works only its own cases (app/UserAccessControl/roles.py).
 
     streamlit run app/ui.py          (needs the worker running: python -m app.worker)
 
+    officer1   the approval queue                         (staff are seeded in data/staff.csv, password 1234)
+    fraud1     the fraud queue
+    manager1   both queues, awaiting customer, the spot-check of automatic replies, all cases
+    customer   signs up with their customer ID, then files complaints, follows them and answers our questions
+
 Each case opens with the summary an officer needs to act (agent/summary.py): why it is in this queue, what happened,
 the decision, the one transaction that proves it, and the reply. The full evidence, how the agent decided, and the
-audit log are one click away, collapsed.
+audit log are one click away, collapsed. A customer only ever sees roles.customer_view: never an unsent draft.
 """
 import sys
 import time
@@ -16,6 +21,7 @@ import streamlit as st  # noqa: E402
 
 from agent.summary import case_summary  # noqa: E402
 from app import store  # noqa: E402
+from app.UserAccessControl import auth, roles  # noqa: E402
 from app.worker import submit, submit_reply  # noqa: E402
 
 st.set_page_config(page_title="Teratai complaints", layout="wide")
@@ -27,12 +33,113 @@ STATUS_WORDS = {"PENDING_APPROVAL": "Approval queue", "FRAUD_QUEUE": "Fraud queu
                 "ANSWERED": "Answered (off-topic)", "APPROVED": "Approved and sent", "REJECTED": "Rejected",
                 "SENT": "Resolved automatically (old)"}
 AUTO_SENT = ["RESOLVED", "ANSWERED", "SENT"]          # replies that went out with no person involved
+QUEUES = ("PENDING_APPROVAL", "FRAUD_QUEUE")
 
-page = st.sidebar.radio("Page", ["Submit complaint", "Approval queue", "Fraud queue", "Awaiting customer",
-                                 "Resolved automatically", "All cases"])
-for status, n in sorted(store.counts().items(),
-                        key=lambda x: list(STATUS_WORDS).index(x[0]) if x[0] in STATUS_WORDS else 99):
-    st.sidebar.write(f"{STATUS_WORDS.get(status, status)}: **{n}**")
+ROLE_WORDS = {roles.OFFICER: "Complaints officer", roles.FRAUD: "Fraud analyst", roles.MANAGER: "Manager",
+              roles.CUSTOMER: "Customer"}
+PAGES = {roles.OFFICER: ["Approval queue", "Submit complaint", "All cases"],
+         roles.FRAUD: ["Fraud queue", "Submit complaint", "All cases"],
+         roles.MANAGER: ["Approval queue", "Fraud queue", "Awaiting customer", "Resolved automatically", "All cases",
+                         "Submit complaint"],
+         roles.CUSTOMER: ["My cases", "New complaint"]}
+# What a customer is told about their case. Both queues read the same: the customer is never told it is with fraud.
+CUSTOMER_STATUS = {"AWAITING_CUSTOMER": "We need more details from you", "PENDING_APPROVAL": "Being reviewed",
+                   "FRAUD_QUEUE": "Being reviewed", "RESOLVED": "Answered", "ANSWERED": "Answered",
+                   "APPROVED": "Answered", "SENT": "Answered", "REJECTED": "Closed"}
+
+
+def signed_in():
+    """The account behind this browser session's token, checked again on every rerun (expiry, removed account)."""
+    token = st.session_state.get("token")
+    if not token:
+        return None
+    try:
+        return auth.user_from_token(token)
+    except auth.AuthError as e:
+        del st.session_state["token"]
+        st.session_state["auth_notice"] = e.message
+        return None
+
+
+def login_page():
+    st.title("Teratai Bank complaints")
+    if notice := st.session_state.pop("auth_notice", None):
+        st.info(notice)
+    log_in, sign_up = st.tabs(["Log in", "Sign up (customers)"])
+    with log_in:
+        with st.form("login"):
+            username = st.text_input("Username or customer ID", placeholder="officer1 or CUS-00150")
+            password = st.text_input("Password", type="password")
+            go = st.form_submit_button("Log in", type="primary")
+        if go:
+            try:
+                st.session_state["token"], _ = auth.login(username, password)
+            except auth.AuthError as e:
+                st.error(e.message)
+            else:
+                st.rerun()
+        st.caption("Staff: officer1, fraud1 or manager1, password 1234. Customers: sign up first with your customer ID.")
+    with sign_up:
+        sign_up_form()
+
+
+def sign_up_form():
+    """Two steps, as in POST /auth/signup/verify then /auth/signup: check the customer ID, then create a password."""
+    cid = st.session_state.get("signup_id")
+    if not cid:
+        with st.form("signup-id"):
+            entered = st.text_input("Customer ID", placeholder="CUS-00150")
+            go = st.form_submit_button("Continue", type="primary")
+        if go:
+            try:
+                st.session_state["signup_id"] = auth.check_customer_id(entered).username
+            except auth.AuthError as e:
+                st.error(e.message)
+            else:
+                st.rerun()
+        return
+    st.write(f"Create a password for customer ID **{cid}**.")
+    with st.form("signup-password"):
+        password = st.text_input("Password", type="password",
+                                 help=f"At least {auth.MIN_PASSWORD_LENGTH} characters")
+        again = st.text_input("Confirm password", type="password")
+        go = st.form_submit_button("Sign up", type="primary")
+    if st.button("Use a different customer ID"):
+        del st.session_state["signup_id"]
+        st.rerun()
+    if go:
+        if password != again:
+            st.error("The passwords don't match. Type the same password twice.")
+            return
+        try:
+            auth.sign_up(cid, password)
+        except auth.AuthError as e:
+            st.error(e.message)
+            return
+        del st.session_state["signup_id"]
+        st.session_state["auth_notice"] = f"Signed up. Log in with {cid} and your new password."
+        st.rerun()
+
+
+user = signed_in()
+if user is None:
+    login_page()
+    st.stop()
+
+st.sidebar.markdown(f"**{user.full_name}**  \n{ROLE_WORDS[user.role]} · `{user.username}`")
+if st.sidebar.button("Log out"):
+    del st.session_state["token"]
+    st.rerun()
+page = st.sidebar.radio("Page", PAGES[user.role])
+if user.role != roles.CUSTOMER:
+    for status, n in sorted(store.counts(**roles.case_filter(user)).items(),
+                            key=lambda x: list(STATUS_WORDS).index(x[0]) if x[0] in STATUS_WORDS else 99):
+        st.sidebar.write(f"{STATUS_WORDS.get(status, status)}: **{n}**")
+
+
+def my_cases(status=None, limit=200):
+    """store.list_cases limited to what the signed-in user may see."""
+    return store.list_cases(status, limit, **roles.case_filter(user))
 
 
 def money(v):
@@ -57,20 +164,19 @@ def show_case(case, actions=False, headline=True):
     else:
         st.caption("✓ Reply checked: every transaction, amount and date in it belongs to this case's evidence")
 
-    if actions:
+    if actions and roles.can_act(user, case):
         text = st.text_area("Reply to the customer (edit before approving if needed)", case["reply_text"],
                             height=200, key=f"r-{cid}")
-        officer = st.text_input("Officer", "officer1", key=f"o-{cid}")
         a, b = st.columns(2)
         if a.button("Approve and send", key=f"a-{cid}", type="primary"):
             try:
-                store.approve(cid, officer, text if text != case["reply_text"] else None)
+                store.approve(cid, user.username, text if text != case["reply_text"] else None)
                 st.rerun()
             except store.ReplyCheckFailed as e:
                 st.error("Not sent: the reply failed the self-check.\n\n" + "\n".join(f"- {p}" for p in e.problems))
         if b.button("Reject", key=f"x-{cid}"):
             try:
-                store.reject(cid, officer)
+                store.reject(cid, user.username)
                 st.rerun()
             except ValueError as e:
                 st.error(str(e))
@@ -80,7 +186,7 @@ def show_case(case, actions=False, headline=True):
         if case["status"] in store.SENT_STATUSES:
             flag_box(case)
     if case["status"] == "AWAITING_CUSTOMER":
-        customer_reply_box(case)
+        customer_reply_box(cid, "Customer's answer to the follow-up question")
     details(case)
 
 
@@ -142,10 +248,9 @@ def flag_box(case):
     with st.popover("Flag for review"):
         note = st.text_input("What looks wrong?", key=f"fn-{cid}",
                              placeholder="e.g. wrong transaction refunded, reply tone")
-        officer = st.text_input("Officer", "officer1", key=f"fo-{cid}")
         if st.button("Flag", key=f"fb-{cid}"):
             try:
-                store.flag_for_review(cid, officer, note)
+                store.flag_for_review(cid, user.username, note)
                 st.rerun()
             except ValueError as e:
                 st.error(str(e))
@@ -160,26 +265,46 @@ def case_list(rows, actions=False):
             show_case(case, actions=actions, headline=False)
 
 
-def customer_reply_box(case):
-    """Plays the customer's side: answer the follow-up question, and the worker reprocesses the case."""
-    cid = case["complaint_id"]
-    answer = st.text_area("Customer's answer to the follow-up question", key=f"c-{cid}")
-    if st.button("Send customer reply", key=f"s-{cid}") and answer.strip():
-        before = case["record"]["complaint"].get("follow_ups", 0)
+def wait_for_worker(cid, before=None):
+    """Poll until the worker has (re)processed the case, i.e. its updated_at moved on from `before`."""
+    with st.spinner("Waiting for the worker..."):
+        for _ in range(60):
+            case = store.get_case(cid)
+            if case and case["updated_at"] != before:
+                return case
+            time.sleep(0.5)
+    st.warning("Not processed yet. Is `python -m app.worker` running?")
+    return None
+
+
+def customer_reply_box(cid, label):
+    """Answer the follow-up question; the worker reprocesses the case. Staff use it to play the customer's side."""
+    answer = st.text_area(label, key=f"c-{cid}")
+    if st.button("Send reply", key=f"s-{cid}") and answer.strip():
+        before = store.get_case(cid)["updated_at"]
         submit_reply(cid, answer)
-        with st.spinner("Waiting for the worker..."):
-            for _ in range(60):
-                time.sleep(0.5)
-                now = store.get_case(cid)
-                if now and now["record"]["complaint"].get("follow_ups", 0) > before:
-                    break
-            else:
-                st.warning("Not processed yet. Is `python -m app.worker` running?")
+        wait_for_worker(cid, before)
         st.rerun()
+
+
+def customer_case(case):
+    """A customer's own case: what they sent and the messages exchanged. roles.customer_view, never the internals."""
+    st.caption(f"{case['channel']} · sent {case['received_at']} · {CUSTOMER_STATUS.get(case['status'], 'Being reviewed')}")
+    with st.chat_message("user"):
+        st.write(case["text"])
+    for m in case.get("messages", []):
+        with st.chat_message("user" if m["from"] == "customer" else "assistant"):
+            st.write(m["text"])
+            st.caption(m["ts"])
+    if case["status"] in ("PENDING_APPROVAL", "FRAUD_QUEUE"):
+        st.info("Our team is reviewing your case. We'll reply here.")
+    if case["status"] == "AWAITING_CUSTOMER":
+        customer_reply_box(case["complaint_id"], "Your answer")
 
 
 if page == "Submit complaint":
     st.header("New complaint")
+    st.caption("Intake for any customer, e.g. a call-centre note or a live-round row.")
     with st.form("new"):
         complaint_id = st.text_input("Complaint ID (optional, e.g. LIVE-01; generated if empty)", "")
         customer_id = st.text_input("Customer ID", "CUS-00150")
@@ -194,18 +319,42 @@ if page == "Submit complaint":
         if complaint_id.strip():
             new["complaint_id"] = complaint_id.strip()
         cid = submit(new)
-        st.info(f"{cid} dropped into the inbox; waiting for the worker...")
-        for _ in range(60):
-            case = store.get_case(cid)
-            if case:
-                show_case(case)
-                break
-            time.sleep(0.5)
-        else:
-            st.warning("Not processed yet. Is `python -m app.worker` running?")
+        st.info(f"{cid} dropped into the inbox.")
+        case = wait_for_worker(cid)
+        if case and roles.can_view(user, case):
+            show_case(case)
+        elif case:
+            st.success(f"{cid} was processed and routed to {case['route'] or case['status']}: not your queue.")
+
+elif page == "New complaint":
+    st.header("Tell us what went wrong")
+    with st.form("new"):
+        subject = st.text_input("Subject (optional)", "")
+        text = st.text_area("What happened? Include the amount, the date and the merchant if you know them.",
+                            height=150)
+        sent = st.form_submit_button("Send", type="primary")
+    if sent and text.strip():
+        # The demo's transactions end on 30 Sep 2026, so a customer's complaint is received then, like the live round.
+        cid = submit({"customer_id": user.username, "channel": "App chat", "received_at": DEFAULT_RECEIVED,
+                      "subject": subject.strip(), "text": text})
+        st.success(f"Thanks, we've received your complaint ({cid}).")
+        if case := wait_for_worker(cid):
+            customer_case(roles.customer_view(case))
+
+elif page == "My cases":
+    rows = my_cases(limit=1000)
+    st.header(f"My cases ({len(rows)})")
+    if not rows:
+        st.info("You have no complaints with us. Use New complaint to tell us what went wrong.")
+    for row in rows:
+        case = roles.customer_view(store.get_case(row["complaint_id"]))
+        waiting = case["status"] == "AWAITING_CUSTOMER"
+        with st.expander(f"{case['complaint_id']} · {CUSTOMER_STATUS.get(case['status'], 'Being reviewed')} · "
+                         f"{case['text'][:60]}", expanded=waiting):
+            customer_case(case)
 
 elif page == "Awaiting customer":
-    rows = store.list_cases("AWAITING_CUSTOMER")
+    rows = my_cases("AWAITING_CUSTOMER")
     st.header(f"Awaiting customer ({len(rows)})")
     st.caption("Open cases with no decision yet: we asked these customers for more details. "
                "Their reply continues the case automatically.")
@@ -216,13 +365,13 @@ elif page == "Awaiting customer":
 
 elif page in ("Approval queue", "Fraud queue"):
     status = "PENDING_APPROVAL" if page == "Approval queue" else "FRAUD_QUEUE"
-    rows = store.list_cases(status)
+    rows = my_cases(status)
     st.header(f"{page} ({len(rows)})")
     st.caption("Each case says why it needs you. Open one to review the decision and the reply.")
     case_list(rows, actions=True)
 
 elif page == "Resolved automatically":
-    rows = store.list_cases(AUTO_SENT)
+    rows = my_cases(AUTO_SENT)
     st.header(f"Resolved automatically ({len(rows)})")
     st.caption("Replies that went out with no person involved: refunds within the limit, service complaints and "
                "off-topic messages. Spot-check them; flag anything that looks wrong for follow-up.")
@@ -236,12 +385,12 @@ else:
                "Flagged for review": "flagged"}
     pick = st.selectbox("Show", list(choices))
     want = choices[pick]
-    rows = store.list_cases(None if want == "flagged" else want, limit=1000)
+    rows = my_cases(None if want == "flagged" else want, limit=1000)
     if want == "flagged":
         flagged = store.flagged_ids()
         rows = [r for r in rows if r["complaint_id"] in flagged]
     st.header(f"{pick if pick != 'All' else 'All cases'} ({len(rows)})")
-    st.caption("Click a row to open the case.")
+    st.caption("Click a row to open the case." + ("" if user.role == roles.MANAGER else " Only cases in your queue."))
     event = st.dataframe(
         [{"case": r["complaint_id"], "status": STATUS_WORDS.get(r["status"], r["status"]), "category": r["category"],
           "outcome": r["outcome"] or "-", "refund": money(r["refund_amount_myr"]), "priority": r["priority"],
@@ -250,4 +399,4 @@ else:
     if event.selection.rows:
         case = store.get_case(rows[event.selection.rows[0]]["complaint_id"])
         st.divider()
-        show_case(case, actions=case["status"] in ("PENDING_APPROVAL", "FRAUD_QUEUE"))
+        show_case(case, actions=case["status"] in QUEUES)
