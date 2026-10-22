@@ -1,5 +1,11 @@
 """Access control: customer sign-up, login for all four roles, tokens, and who sees which case.
 Runs on temp copies of data/staff.csv and data/customers.csv and a temp customer_accounts.csv, so no real file is written."""
+
+import os
+
+os.environ["PYTHON_DOTENV_DISABLED"] = "1"   # tests never read .env ...
+os.environ["LLM_PROVIDER"] = ""              # ... and never call a real LLM
+
 import shutil
 import tempfile
 import unittest

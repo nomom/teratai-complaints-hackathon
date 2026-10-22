@@ -31,6 +31,12 @@ def current_user(creds: Optional[HTTPAuthorizationCredentials] = Depends(_bearer
         raise http_error(e)
 
 
+def optional_user(creds: Optional[HTTPAuthorizationCredentials] = Depends(_bearer)) -> Optional[Account]:
+    """The signed-in user, or None when the call carries no token (the organisers' contract calls carry none).
+    A token that is sent but invalid is still a 401: it never quietly counts as "not logged in"."""
+    return None if creds is None else current_user(creds)
+
+
 def require_roles(*roles: str):
     """A dependency that lets through only these roles (403 for any other signed-in role)."""
     def dependency(user: Account = Depends(current_user)) -> Account:

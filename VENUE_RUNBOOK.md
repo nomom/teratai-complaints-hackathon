@@ -14,32 +14,30 @@ Everything to set up and test at the venue so the organisers can reach our API, 
 | until 16:30 | UI and ops platform may still change; the agent and API may not |
 | 16:30 | **Demo**, about 10 min, including the **human gate**: judges send 3 complaints to our API, one at a time, and watch |
 
-## 1. Where things stand (2026-10-22, 23:00)
+## 1. Where things stand (2026-10-22, 23:15)
 
 | Thing | State |
 |---|---|
-| `origin/main` (`4b73e2a`, Clement) | React dashboard in `web/` replaces Streamlit (`app/ui.py` deleted); `run.bat` / `run.sh` start worker + API + dashboard. **Does not have** the organisers' latest changes (`docs/api.md`, `scoring/api_check.py`) |
-| `b/api-contract` (`4aa8886`, B) | The organisers' upstream changes merged, plus the live-round API to the contract. Tested: `api_check.py`, 20 at once, LLM on: **100.0, 20/20 states, 9/9 probes, slowest 22.9 s**. **Not merged into main** (see 2) |
+| `main` | Everything merged: the React dashboard (Clement), the organisers' latest changes (`docs/api.md`, `scoring/api_check.py`), and the live-round API (B). `run.bat` / `run.sh` start worker + API + React dashboard (http://localhost:5173) |
+| Tests | 110 Python tests (offline, about 7 s) and 31 React tests pass. `api_check.py` against the merged API, LLM on: **100.0, 10/10 states, 9/9 probes**; earlier with 20 at once: **100.0, 20/20, 9/9, slowest 22.9 s** |
 | Working folder | Someone's **uncommitted OpenRouter provider** (`agent/llm.py`, `agent/extract.py`, `.env.example`, `MODEL_EVAL.md`, `scripts/run_batch.py`, `tests/test_llm.py`). Not B's, never committed by B: ask the team whose it is |
 | `submissions/Claude the Destroyer/predictions.csv` | Run 3 (LLM, 750/750, valid). Untracked. **Regenerate from the final main before submitting** |
 | Model | OpenAI `gpt-5.6-luna` in `.env`: about 3.8 s and $0.0007 per complaint ([MODEL_EVAL.md](MODEL_EVAL.md)) |
 
-## 2. Merge `b/api-contract` into main (before the venue tests)
+## 2. How the API serves both the dashboard and the organisers (merged 2026-10-22)
 
-The React dashboard and the contract both use `GET /cases/{id}` and `POST /complaints`, differently:
+| Endpoint | With a login token (the React dashboard) | Without a token (the organisers, the judges) |
+|---|---|---|
+| `GET /cases/{id}` | Role view, as before: full record + summary for staff (404 until the worker stores it, 403 outside the role's queue); customer view for customers | Contract view: `status` (`processing` / `done` / `error`), decision, `self_check`, `case_state`, `sent`, `human_action`; 404 if never seen |
+| `POST /complaints` | Signed-in staff may leave `complaint_id` empty: `LIVE-xxxxxxxx` is made up | All of `complaint_id`, `customer_id`, `received_at`, `text` required (422); duplicate id returns the existing case (200) |
+| `POST /cases/{id}/actions`, `GET /health` | – | Open, as `docs/api.md` requires |
+| `/cases`, `/cases/counts`, `/approve`, `/reject`, `/flag`, `/me/complaints`, `/stats` | Login, unchanged | 401 |
 
-| Endpoint | React (Clement, with a login token) | Contract (organisers, no credentials) | Resolution |
-|---|---|---|---|
-| `GET /cases/{id}` | Full staff view (record + summary), role-filtered (403 for another team's case), customer view for customers | Contract view: `status`, decision, `self_check`, `case_state`, `sent`, `human_action` | **With an `Authorization` header: the role view, unchanged. Without one: the contract view.** Drop `/cases/{id}/record` (no longer needed) |
-| `POST /complaints` | Staff form may leave `complaint_id` empty and expects one to be generated | `complaint_id` required: empty is a 422 | **Signed-in staff with an empty id: generate one** (`LIVE-xxxxxxxx`). No token: the contract rules (422) |
-| Other | `/me/complaints`, `/cases/counts`, `/approve`, `/reject`, `/flag` (login) | `/cases/{id}/actions`, `/health` (no login) | Keep all |
-
-Also on merge:
-- `app/api.py` changed on both sides: resolve by hand. Keep Clement's endpoints and add the contract ones.
-- Run **both** test suites: `uv run python -m unittest discover tests` (includes Clement's `tests/test_api.py` and B's `tests/test_api_contract.py`) and the React tests in `web/` (`npm test`).
-- `TEAM.md` / `END_GOAL.md` still mention Streamlit: update to the React dashboard (`run.bat`, http://localhost:5173).
-- `run.bat` starts the API with `--port 8000` only (listens on this laptop only). That's fine with a tunnel; for same-Wi-Fi access the API needs `--host 0.0.0.0` (see 4).
-- Tell Clement first: the contract endpoints are open by design (the organisers' calls carry no credentials).
+A token that is sent but invalid is a 401, never treated as "no login". `run.bat` starts the API without
+`--host 0.0.0.0`: fine behind a tunnel; for same-Wi-Fi access start the API by hand (section 4, option B).
+Clement: please review (`app/api.py`, `app/UserAccessControl/deps.py`, and the offline guard added to the top of
+`tests/test_access_control.py`, `tests/test_api.py`, `tests/test_worker.py`: without it the suite read `.env` and called
+the real LLM).
 
 ## 3. Start the system for the live round
 
@@ -93,7 +91,7 @@ Risks: many venues block laptops from reaching each other, and the IP can change
 
 ## 6. Before 15:00: freeze and submit
 
-1. All merges done on `main`, tests pass, `api_check` passes against the URL.
+1. Everything merged on `main`, both test suites pass, `api_check` passes against the URL.
 2. Regenerate the predictions from the final `main` (LLM on, about 6½ min, about $0.52):
    `uv run python -m scripts.run_batch --split test --team "Claude the Destroyer"`
    Check `750/750`, no `LLM failures by kind` line, `intents: {'COMPLAINT': 750}`.
@@ -135,8 +133,8 @@ agent's own bad draft.
 
 ## For Claude, when the team says "we're at the venue"
 
-1. `git fetch`; read this file and section 8; check `git status` (whose uncommitted work is there).
-2. If section 2 isn't merged yet: do the merge on a branch with the resolutions above, run both test suites, then merge.
+1. `git fetch`; `git pull` on main; read this file and section 8; check `git status` (whose uncommitted work is there).
+2. Run both test suites: `uv run python -m unittest discover tests` and `npm test` in `web/` (after `npm ci`).
 3. Smoke-test the LLM with one complaint.
 4. Have the user start the three processes (section 3) and the tunnel (section 4), in their own windows.
 5. Run `api_check` on localhost, then against the public URL; have a teammate run it from another laptop.

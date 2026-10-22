@@ -44,10 +44,14 @@ def inbox_state(complaint_id: str):
     return None
 
 
+def new_complaint_id() -> str:
+    return "LIVE-" + uuid.uuid4().hex[:8].upper()
+
+
 def submit(complaint: dict) -> str:
     """Drop a complaint into the inbox; returns its id. Used by the API and the UI."""
     c = dict(complaint)
-    c.setdefault("complaint_id", "LIVE-" + uuid.uuid4().hex[:8].upper())
+    c.setdefault("complaint_id", new_complaint_id())
     c.setdefault("received_at", dt.datetime.now().strftime("%Y-%m-%d %H:%M"))
     c.setdefault("subject", "")
     INBOX.mkdir(exist_ok=True)

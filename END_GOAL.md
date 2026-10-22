@@ -8,7 +8,7 @@ What we hand in at 15:00 on Day 2 (the agent and API freeze), and what the judge
 
 ## 1. A working app
 
-It runs on a laptop as three processes: `python -m app.worker`, the API (`uvicorn app.api:app --host 0.0.0.0 --port 8000`) and the dashboard. Officers use the dashboard. **The live round talks to the API** ([docs/api.md](docs/api.md)): the organisers' script and the judges POST complaints to it with no login, read the decision back, and approve through it.
+It runs on a laptop as three processes: `python -m app.worker`, the API (`uvicorn app.api:app --host 0.0.0.0 --port 8000`) and the React dashboard in `web/` (`run.bat` starts all three). Officers use the dashboard. **The live round talks to the API** ([docs/api.md](docs/api.md)): the organisers' script and the judges POST complaints to it with no login, read the decision back, and approve through it.
 
 | Screen | What it does |
 |---|---|

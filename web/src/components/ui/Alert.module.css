@@ -1,0 +1,87 @@
+.alert {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid;
+  border-radius: var(--radius);
+  margin: var(--space-1) 0 var(--space-2);
+}
+
+.icon {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  margin-top: 2px;
+}
+
+.body {
+  flex: 1;
+  min-width: 0;
+}
+
+.body p,
+.body ul {
+  margin: 0;
+  color: var(--text);
+}
+
+.body ul {
+  padding-left: 18px;
+  margin-top: var(--space-1);
+}
+
+.dismiss {
+  display: inline-flex;
+  border: 0;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: var(--radius);
+}
+
+.dismiss:hover {
+  color: var(--text);
+}
+
+.dismiss svg {
+  width: 16px;
+  height: 16px;
+}
+
+.success {
+  background: var(--success-tint);
+  border-color: var(--success-border);
+}
+
+.success .icon {
+  color: var(--success-ink);
+}
+
+.error {
+  background: var(--error-tint);
+  border-color: var(--error-border);
+}
+
+.error .icon {
+  color: var(--error-ink);
+}
+
+.warning {
+  background: var(--warning-tint);
+  border-color: var(--warning-border);
+}
+
+.warning .icon {
+  color: var(--warning-ink);
+}
+
+.info {
+  background: var(--info-tint);
+  border-color: var(--info-border);
+}
+
+.info .icon {
+  color: var(--info-ink);
+}

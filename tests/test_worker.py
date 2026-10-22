@@ -1,4 +1,10 @@
 """The worker's startup backfill: past complaints reach the case store once, rules only, and stored cases are kept."""
+
+import os
+
+os.environ["PYTHON_DOTENV_DISABLED"] = "1"   # tests never read .env ...
+os.environ["LLM_PROVIDER"] = ""              # ... and never call a real LLM
+
 import shutil
 import tempfile
 import threading

@@ -21,6 +21,8 @@ from agent import tools
 from app import store, worker
 from app.api import app
 
+ROOT = Path(__file__).resolve().parent.parent
+
 ATM = {"complaint_id": "CMP-00244", "customer_id": "CUS-02394", "received_at": "2026-07-20 22:32", "channel": "Email",
        "subject": "ATM did not dispense cash",
        "text": "Hello, the machine did not dispense all of the cash when I withdrew about RM1,500 last Friday, "
@@ -154,9 +156,35 @@ class Contract(unittest.TestCase):
         r = self.api.post("/cases/CMP-00387/actions", json={"action": "approve", "actor": "x", "reason": "y"})
         self.assertEqual(r.status_code, 409)
 
-    def test_full_record_needs_a_login(self):
+    def staff_token(self):
+        from app.UserAccessControl import accounts, auth
+        for target, name, value in ((accounts, "STAFF_CSV", ROOT / "data" / "staff.csv"),
+                                    (auth, "_secret", lambda: b"contract-tests")):
+            p = mock.patch.object(target, name, value)
+            p.start()
+            self.addCleanup(p.stop)
+        r = self.api.post("/auth/login", json={"username": "officer1", "password": "1234"})
+        return {"Authorization": f"Bearer {r.json()['access_token']}"}
+
+    def test_same_endpoint_gives_staff_the_full_case_and_the_organisers_the_contract(self):
         self.decided()
-        self.assertEqual(self.api.get("/cases/CMP-00244/record").status_code, 401)
+        public = self.api.get("/cases/CMP-00244").json()                 # no credentials: the contract view
+        self.assertEqual((public["status"], public["case_state"]), ("done", "awaiting_approval"))
+        self.assertNotIn("record", public)
+        staff = self.api.get("/cases/CMP-00244", headers=self.staff_token()).json()   # the React app's view
+        self.assertIn("record", staff)
+        self.assertIn("headline", staff["summary"])
+        bad = self.api.get("/cases/CMP-00244", headers={"Authorization": "Bearer not-a-token"})
+        self.assertEqual(bad.status_code, 401)                           # a bad token is never "no login"
+
+    def test_signed_in_staff_may_leave_the_id_empty_the_organisers_may_not(self):
+        no_id = {**ATM, "complaint_id": ""}
+        self.assertEqual(self.api.post("/complaints", json=no_id).status_code, 422)
+        missing = {k: v for k, v in ATM.items() if k != "complaint_id"}
+        self.assertEqual(self.api.post("/complaints", json=missing).status_code, 422)
+        r = self.api.post("/complaints", json=no_id, headers=self.staff_token())    # the React staff form
+        self.assertEqual(r.status_code, 202)
+        self.assertRegex(r.json()["complaint_id"], r"^LIVE-[0-9A-F]{8}$")
 
 
 if __name__ == "__main__":

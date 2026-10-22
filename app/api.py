@@ -12,7 +12,8 @@ the live round will: python scoring/api_check.py http://localhost:8000
 
 Everything else needs a login (app/UserAccessControl: POST /auth/login, then a Bearer token) and shows each role only
 its own cases: officer HUMAN_APPROVAL, fraud FRAUD_TEAM, manager all, customer their own (and only messages sent).
-That includes GET /cases/{id}/record, the full case with evidence and audit log.
+The React app in web/ is the client: it calls the same GET /cases/{id} and POST /complaints with its token, and gets the
+staff view (full record and summary) instead of the contract view. A signed-in customer files with POST /me/complaints.
 """
 import datetime as dt
 import os
@@ -29,9 +30,9 @@ from agent.summary import case_summary
 from app import contract, store
 from app.UserAccessControl import roles
 from app.UserAccessControl.accounts import Account, get_customer
-from app.UserAccessControl.deps import require_roles
+from app.UserAccessControl.deps import optional_user, require_roles
 from app.UserAccessControl.routes import router as auth_router
-from app.worker import inbox_state, submit, submit_reply
+from app.worker import inbox_state, new_complaint_id, submit, submit_reply
 
 app = FastAPI(title="Teratai complaints agent")
 app.include_router(auth_router)
@@ -47,8 +48,9 @@ app.add_middleware(
 
 
 class ComplaintIn(BaseModel):
-    """The six fields of a complaints.csv row (docs/api.md). A missing field is a 422 from FastAPI itself."""
-    complaint_id: str
+    """The six fields of a complaints.csv row (docs/api.md). A missing customer_id, received_at or text is a 422 from
+    FastAPI itself; complaint_id is checked below (signed-in staff may leave it empty)."""
+    complaint_id: str = ""
     customer_id: str
     received_at: str                       # "YYYY-MM-DD HH:MM": dates in the text are read from this, not today
     text: str
@@ -73,9 +75,12 @@ def _status_of(complaint_id: str) -> Optional[str]:
 
 
 @app.post("/complaints", status_code=202)
-def create_complaint(body: ComplaintIn):
-    """Contract intake. The same complaint_id again returns the existing case's status (200): no second case."""
+def create_complaint(body: ComplaintIn, user: Optional[Account] = Depends(optional_user)):
+    """Contract intake. The same complaint_id again returns the existing case's status (200): no second case.
+    Signed-in staff (the React form) may leave complaint_id empty: one is made up. Without a login it is required."""
     c = {k: v.strip() for k, v in body.model_dump().items()}
+    if not c["complaint_id"] and user is not None and user.role in roles.STAFF_ROLES:
+        c["complaint_id"] = new_complaint_id()
     for field in ("complaint_id", "customer_id", "received_at", "text"):
         if not c[field]:
             raise HTTPException(422, f"{field} is empty")
@@ -114,29 +119,69 @@ def customer_reply(complaint_id: str, body: CustomerReplyIn):
     return {"message_id": submit_reply(complaint_id, body.text), "status": "QUEUED"}
 
 
+class OwnComplaintIn(BaseModel):   # a signed-in customer files under their own ID, from the app
+    text: str
+    subject: str = ""
+
+
+# The bank's data ends on 30 Sep 2026, so complaints filed from the customer app are received then (as in the live round)
+APP_RECEIVED_AT = "2026-09-30 18:00"
+
+
+@app.post("/me/complaints", status_code=202)
+def file_own_complaint(body: OwnComplaintIn, user: Account = Depends(require_roles(roles.CUSTOMER))):
+    if not body.text.strip():
+        raise HTTPException(422, "tell us what happened")
+    cid = submit({"customer_id": user.username, "channel": "App chat", "received_at": APP_RECEIVED_AT,
+                  "subject": body.subject.strip(), "text": body.text})
+    return {"complaint_id": cid, "status": "QUEUED"}
+
+
 def _visible_case(complaint_id: str, user: Account) -> dict:
     c = store.get_case(complaint_id)
     if not c:
         raise HTTPException(404, "not processed yet (is the worker running?)")
     if not roles.can_view(user, c):
-        raise HTTPException(403, {"code": "FORBIDDEN", "message": "This case is not in your queue."})
+        detail = {"code": "FORBIDDEN", "message": "This case is not in your queue."}
+        if user.role in roles.STAFF_ROLES:     # staff may know where it went (e.g. after taking in a complaint)
+            detail["route"] = c["route"] or c["status"]
+        raise HTTPException(403, detail)
     return c
 
 
-def _for(user: Account, case: dict) -> dict:
-    return roles.customer_view(case) if user.role == roles.CUSTOMER else case
+def _row(user: Account, case: dict, flagged: set) -> dict:
+    """A list row: the case's columns without the full record (GET /cases/{id} has it), plus whether it is flagged."""
+    if user.role == roles.CUSTOMER:
+        return roles.customer_view(case)
+    return {**{k: v for k, v in case.items() if k != "record"}, "flagged": case["complaint_id"] in flagged}
 
 
 @app.get("/cases")
 def cases(status: Optional[str] = None, limit: int = 200, user: Account = Depends(require_roles(*roles.ALL_ROLES))):
-    """`status` may list several, comma-separated: ?status=RESOLVED,ANSWERED"""
+    """`status` may list several, comma-separated: ?status=RESOLVED,ANSWERED. Rows are the case's columns, newest
+    first, without the full record."""
     rows = store.list_cases(status.split(",") if status else None, limit, **roles.case_filter(user))
-    return [_for(user, c) for c in rows]
+    flagged = store.flagged_ids() if user.role != roles.CUSTOMER else set()
+    return [_row(user, c, flagged) for c in rows]
+
+
+@app.get("/cases/counts")
+def case_counts(user: Account = Depends(require_roles(*roles.STAFF_ROLES))):
+    """Cases per status, only those the signed-in role may see."""
+    return store.counts(**roles.case_filter(user))
 
 
 @app.get("/cases/{complaint_id}")
-def case(complaint_id: str):
-    """Contract view (docs/api.md), no login: processing, error, or done with the decision and where the case is."""
+def case(complaint_id: str, user: Optional[Account] = Depends(optional_user)):
+    """Without a login: the contract view (docs/api.md): processing, error, or done with the decision and where the
+    case is. With a login (the React app): the full case for staff, plus `summary`, the at-a-glance view
+    (agent/summary.py), 404 until the worker has stored it and 403 outside the role's queue; a customer gets only
+    roles.customer_view (no decision internals, no unsent draft)."""
+    if user is not None:
+        c = _visible_case(complaint_id, user)
+        if user.role == roles.CUSTOMER:
+            return roles.customer_view(c)
+        return {**c, "summary": case_summary(c["record"], c["status"])}
     c = store.get_case(complaint_id)
     if c:
         return contract.case_view(c)
@@ -180,16 +225,6 @@ def act(complaint_id: str, body: ActionIn):
     except ValueError as e:
         raise HTTPException(409, str(e))
     return contract.case_view(store.get_case(complaint_id))
-
-
-@app.get("/cases/{complaint_id}/record")
-def case_record(complaint_id: str, user: Account = Depends(require_roles(*roles.ALL_ROLES))):
-    """The full case (evidence, trace, audit log), plus `summary`: the at-a-glance view the dashboard shows first
-    (agent/summary.py). Staff login. A customer gets only roles.customer_view: no decision internals, no unsent draft."""
-    c = _visible_case(complaint_id, user)
-    if user.role == roles.CUSTOMER:
-        return roles.customer_view(c)
-    return {**c, "summary": case_summary(c["record"], c["status"])}
 
 
 @app.post("/cases/{complaint_id}/approve")

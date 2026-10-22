@@ -1,0 +1,119 @@
+.page {
+  position: relative;
+  min-height: 100vh;
+  padding: var(--space-4);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.glow {
+  position: absolute;
+  z-index: -1;
+  left: 50%;
+  top: 10%;
+  width: min(720px, 120vw);
+  height: 520px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  filter: blur(110px);
+  opacity: var(--glow-opacity);
+  background: radial-gradient(circle, var(--glow) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.topBar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.panel {
+  width: 100%;
+  max-width: 440px;
+  margin: var(--space-4) auto 0;
+  text-align: center;
+}
+
+.orb {
+  width: 112px;
+  height: 112px;
+  margin: 0 auto var(--space-5);
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, var(--orb-hi), var(--orb-mid) 38%, var(--orb-lo) 70%, var(--orb-edge));
+  box-shadow: 0 0 80px 10px var(--orb-shadow), inset -10px -14px 30px var(--orb-edge), inset 6px 6px 18px var(--rim);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 700;
+}
+
+.dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 0 0 4px var(--primary-tint);
+}
+
+.title {
+  font-size: var(--text-display);
+  font-weight: 600;
+  margin: var(--space-2) 0 var(--space-1);
+}
+
+.subtitle {
+  color: var(--text-2);
+  font-size: var(--text-sm);
+  margin-bottom: var(--space-5);
+}
+
+.tabs {
+  display: flex;
+  gap: var(--space-4);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: var(--space-4);
+}
+
+.tab {
+  padding: var(--space-2) 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: transparent;
+  color: var(--text-2);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.tab:hover {
+  color: var(--text);
+}
+
+.tab[data-state='active'] {
+  color: var(--text);
+  border-bottom-color: var(--primary);
+}
+
+.card {
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: var(--space-5);
+  box-shadow: var(--card-shadow);
+}
+
+.help {
+  color: var(--text-2);
+  font-size: var(--text-sm);
+  text-align: left;
+  margin-top: var(--space-4);
+}
+
+@media (min-width: 720px) {
+  .panel {
+    margin-top: var(--space-8);
+  }
+}

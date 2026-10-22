@@ -1,0 +1,17 @@
+.empty {
+  text-align: center;
+  padding: var(--space-8) var(--space-4);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-card);
+}
+
+.title {
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+.body {
+  color: var(--text-2);
+  font-size: var(--text-sm);
+  margin-top: var(--space-1);
+}
