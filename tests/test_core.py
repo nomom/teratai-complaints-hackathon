@@ -86,7 +86,10 @@ class Matching(unittest.TestCase):
     def test_town_name_alone_is_not_a_name_match(self):
         ex = Extraction(category="DUPLICATE_CHARGE", language="EN")
         text = "charged twice at Butik Ayu Melaka"
-        self.assertNotIn("name", _match(text, ex, [_debit("T1", 50.0, "Kedai Buku Ilmu Melaka")]).reasons[0])
+        # The town word alone is no clue, and with no other clue nothing is matched (B's "no clue, no match" rule)
+        town_only = _match(text, ex, [_debit("T1", 50.0, "Kedai Buku Ilmu Melaka")])
+        self.assertIsNone(town_only.txn)
+        self.assertEqual(town_only.flags, ["NO_MATCH"])
         self.assertIn("name", _match(text, ex, [_debit("T1", 50.0, "Butik Ayu Melaka")]).reasons[0])
 
     def test_extracted_counterparty_with_town_still_matches(self):
