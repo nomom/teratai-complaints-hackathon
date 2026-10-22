@@ -80,14 +80,13 @@ class Matching(unittest.TestCase):
 
     def test_town_name_alone_is_not_a_name_match(self):
         ex = Extraction(category="DUPLICATE_CHARGE", language="EN")
-        text = "charged twice at Butik Ayu Melaka"
-        self.assertNotIn("name", _match(text, ex, [_debit("T1", 50.0, "Kedai Buku Ilmu Melaka")]).reasons[0])
-        self.assertIn("name", _match(text, ex, [_debit("T1", 50.0, "Butik Ayu Melaka")]).reasons[0])
+        text = "charged twice at butik ayu melaka"     # find_transaction lower-cases the text before this check
+        self.assertFalse(matching._name_hit(_debit("T1", 50.0, "Kedai Buku Ilmu Melaka"), ex, text))
+        self.assertTrue(matching._name_hit(_debit("T1", 50.0, "Butik Ayu Melaka"), ex, text))
 
     def test_extracted_counterparty_with_town_still_matches(self):
         ex = Extraction(category="ATM_NOT_DISPENSED", language="EN", counterparty="Melaka Station")
-        m = _match("the ATM at Melaka Station did not dispense", ex, [_debit("T1", 50.0, "Melaka Station")])
-        self.assertIn("name", m.reasons[0])
+        self.assertTrue(matching._name_hit(_debit("T1", 50.0, "Melaka Station"), ex, "the atm did not dispense"))
 
 
 class OldImportPaths(unittest.TestCase):
