@@ -73,7 +73,9 @@ def main():
     suffix = "" if args.split == "test" else f"_{args.split}"
     out = Path(args.out) if args.out else ROOT / "submissions" / args.team / f"predictions{suffix}.csv"
     out.parent.mkdir(parents=True, exist_ok=True)
-    with open(out, "w", newline="", encoding="utf-8") as fh:
+    # utf-8-sig: UTF-8 with a byte-order mark, so Excel shows it correctly on double-click (without the mark it
+    # reads the file as Windows-1252). The official scorer opens predictions with utf-8-sig, so the mark is safe.
+    with open(out, "w", newline="", encoding="utf-8-sig") as fh:
         w = csv.DictWriter(fh, FIELDS)
         w.writeheader()
         for r in records:
