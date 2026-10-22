@@ -19,7 +19,7 @@ Everything to set up and test at the venue so the organisers can reach our API, 
 | Thing | State |
 |---|---|
 | `main` | Everything merged: the React dashboard (Clement), the organisers' latest changes (`docs/api.md`, `scoring/api_check.py`), and the live-round API (B). `run.bat` / `run.sh` start worker + API + React dashboard (http://localhost:5173) |
-| Tests | 110 Python tests (offline, about 7 s) and 31 React tests pass. `api_check.py` against the merged API, LLM on: **100.0, 10/10 states, 9/9 probes**; earlier with 20 at once: **100.0, 20/20, 9/9, slowest 22.9 s** |
+| Tests | 114 Python tests (offline) and 31 React tests pass. `api_check.py` against the merged API, LLM on: **100.0, 10/10 states, 9/9 probes**; earlier with 20 at once: **100.0, 20/20, 9/9, slowest 22.9 s** |
 | Working folder | Someone's **uncommitted OpenRouter provider** (`agent/llm.py`, `agent/extract.py`, `.env.example`, `MODEL_EVAL.md`, `scripts/run_batch.py`, `tests/test_llm.py`). Not B's, never committed by B: ask the team whose it is |
 | `submissions/Claude the Destroyer/predictions.csv` | Run 3 (LLM, 750/750, valid). Untracked. **Regenerate from the final main before submitting** |
 | Model | OpenAI `gpt-5.6-luna` in `.env`: about 3.8 s and $0.0007 per complaint ([MODEL_EVAL.md](MODEL_EVAL.md)) |
@@ -38,6 +38,29 @@ A token that is sent but invalid is a 401, never treated as "no login". `run.bat
 Clement: please review (`app/api.py`, `app/UserAccessControl/deps.py`, and the offline guard added to the top of
 `tests/test_access_control.py`, `tests/test_api.py`, `tests/test_worker.py`: without it the suite read `.env` and called
 the real LLM).
+
+## 2b. Load and concurrency (measured 2026-10-22 night, `scripts/load_test.py`)
+
+The API only validates and queues (`inbox/`, a durable file queue); the worker decides in the background, several at
+a time; clients poll `GET /cases/{id}`. Settings: `WORKERS` (default 16 complaints at once), `MAX_BACKLOG` (default
+200 waiting; beyond it `POST /complaints` answers `503` + `Retry-After: 15` instead of accepting work that would miss
+the 120 s), `API_THREADS` (default 100 requests in flight). The case store runs in SQLite WAL mode (reads don't wait
+for writes); the customer list is read once.
+
+| Test (laptop, all at once) | Before hardening | After hardening |
+|---|---|---|
+| 50 complaints, LLM on | slowest **35.1 s**, median 20.8 s, 1.4/s, 50/50 right | slowest **20.7 s**, median 12.3 s, **2.4/s**, 50/50 right, no rate limits |
+| 2,000 complaints, rules only, 128 clients | POST median 1.6 s (max 3.8 s), slowest done 6.0 s, 30/s | POST median **1.2 s** (max 2.9 s), slowest done **5.0 s**, **38/s** |
+| 500 complaints, rules only, 64 clients | POST median 194 ms, slowest done 3.6 s | POST median 96 ms, slowest done 3.4 s |
+| Worker stalled, 260 posted | (no limit: all accepted, then time out) | **200 accepted, 60 refused with 503 + Retry-After**; queue drained in ~13 s after restart |
+
+In every run: 0 server errors, 0 lost complaints, every decided case correct against the labels; the API stays healthy.
+Rough capacity with the LLM: about 2.4 complaints/s, so a burst of ~250 still finishes within 120 s (the live round
+sends 20). The load test also found a race in the parallel worker (a file finished between listing and hand-out was
+taken twice and logged as a false failure, 2 in 1,000); fixed and tested.
+
+Run it yourself (any URL; it uses fresh ids, so it doesn't touch existing cases):
+`uv run python -m scripts.load_test <URL> --n 50 --threads 50` (LLM on costs about $0.0007 per complaint).
 
 ## 3. Start the system for the live round
 
@@ -87,7 +110,10 @@ Risks: many venues block laptops from reaching each other, and the IP can change
 3. **Human gate rehearsal:** send one complaint through the URL and watch it appear in the dashboard:
    `curl.exe -X POST <URL>/complaints -H "Content-Type: application/json" --data "@examples/live_complaint_example.json"`
    (that example is already a training complaint; for repeats change `complaint_id`, e.g. `LIVE-T1`, `LIVE-T2`).
-4. Record the URL and the `api_check` results here (section 8).
+4. **The live round through the tunnel:** `uv run python -m scripts.load_test <URL> --n 20 --threads 20`
+   (20 at once over the public URL, as the hidden test does; about $0.015 with the LLM). Expect 20/20 done, 20/20
+   correct, slowest well under 120 s. Do this before 12:00, so there is time to switch to LAN or a hotspot.
+5. Record the URL and the results here (section 8).
 
 ## 6. Before 15:00: freeze and submit
 
@@ -116,6 +142,7 @@ agent's own bad draft.
 | API URL given to the organisers | |
 | `api_check` on localhost (20) | |
 | `api_check` from another laptop | |
+| `load_test --n 20` through the public URL | |
 | Checkpoint 2 confirmed by the organisers | |
 | Freeze commit hash | |
 | PR link | |

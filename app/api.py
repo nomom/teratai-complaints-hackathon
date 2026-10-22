@@ -16,11 +16,13 @@ The React app in web/ is the client: it calls the same GET /cases/{id} and POST 
 staff view (full record and summary) instead of the contract view. A signed-in customer files with POST /me/complaints.
 """
 import datetime as dt
+import functools
 import os
 import re
 import threading
 from typing import Literal, Optional
 
+import anyio
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -29,13 +31,22 @@ from pydantic import BaseModel
 from agent.summary import case_summary
 from app import contract, store
 from app.UserAccessControl import roles
-from app.UserAccessControl.accounts import Account, get_customer
+from app.UserAccessControl import accounts
+from app.UserAccessControl.accounts import Account
 from app.UserAccessControl.deps import optional_user, require_roles
 from app.UserAccessControl.routes import router as auth_router
-from app.worker import inbox_state, new_complaint_id, submit, submit_reply
+from app.worker import backlog, inbox_state, new_complaint_id, submit, submit_reply
 
 app = FastAPI(title="Teratai complaints agent")
 app.include_router(auth_router)
+API_THREADS = int(os.environ.get("API_THREADS", 100))
+
+
+@app.on_event("startup")
+def _more_threads():
+    """FastAPI runs these (sync) handlers in a pool of 40 threads by default; the live round sends everything at once,
+    so let more requests in flight. Each one is short (a file write or a database read)."""
+    anyio.to_thread.current_default_thread_limiter().total_tokens = API_THREADS
 
 # Lets a browser frontend on another port (e.g. the optional React app in web/) call this API.
 # Default: Vite (5173) and Create React App (3000) dev servers. Override with a comma-separated CORS_ORIGINS.
@@ -65,10 +76,24 @@ class ApprovalIn(BaseModel):       # the actor is the signed-in user, not a fiel
 
 SAFE_ID = re.compile(r"[A-Za-z0-9._-]{1,64}")    # the id becomes a file name in inbox/
 _intake = threading.Lock()                       # check-then-submit, so a double POST can't make two cases
+# Backpressure: past this many complaints waiting, new ones get 503 + Retry-After instead of being accepted and then
+# missing the live round's 120 s. Measured throughput with the LLM: about 1.4/s with 8 workers (scripts/load_test.py).
+MAX_BACKLOG = int(os.environ.get("MAX_BACKLOG", 200))
+RETRY_AFTER_SECONDS = 15
+
+
+@functools.lru_cache(maxsize=1)
+def _customer_ids() -> frozenset:
+    """The bank's customers (customers.csv, read once: the organisers' data never changes)."""
+    return frozenset(r["customer_id"] for r in accounts._read(accounts.CUSTOMERS_CSV)[1])
+
+
+def _known_customer(customer_id: str) -> bool:
+    return accounts.normalise_customer_id(customer_id) in _customer_ids()
 
 
 def _status_of(complaint_id: str) -> Optional[str]:
-    if store.get_case(complaint_id):
+    if store.has_case(complaint_id):
         return "done"
     state = inbox_state(complaint_id)
     return state[0] if state else None
@@ -90,13 +115,17 @@ def create_complaint(body: ComplaintIn, user: Optional[Account] = Depends(option
         dt.datetime.strptime(c["received_at"][:16], "%Y-%m-%d %H:%M")
     except ValueError:
         raise HTTPException(422, "received_at must be 'YYYY-MM-DD HH:MM'")
-    if get_customer(c["customer_id"]) is None:
+    c["customer_id"] = accounts.normalise_customer_id(c["customer_id"])     # "cus-02394" is CUS-02394
+    if not _known_customer(c["customer_id"]):
         raise HTTPException(422, f"unknown customer {c['customer_id']}")
     c["text"] = body.text                       # keep the customer's own spacing and line breaks
     with _intake:
         status = _status_of(c["complaint_id"])
         if status:
             return JSONResponse({"complaint_id": c["complaint_id"], "status": status}, status_code=200)
+        if backlog(limit=MAX_BACKLOG) >= MAX_BACKLOG:   # overloaded: say so now rather than accept and time out
+            raise HTTPException(503, f"busy: {MAX_BACKLOG} complaints waiting, try again shortly",
+                                headers={"Retry-After": str(RETRY_AFTER_SECONDS)})
         submit(c)
     return {"complaint_id": c["complaint_id"], "status": "processing"}
 

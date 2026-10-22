@@ -31,14 +31,24 @@ def _now():
     return dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
+_ready = set()        # databases whose tables and WAL mode are already set up, in this process
+
+
 @contextmanager
 def connect():
-    """One transaction: commit on success, roll back on error, and always close (sqlite3's own `with` doesn't)."""
+    """One transaction: commit on success, roll back on error, and always close (sqlite3's own `with` doesn't).
+
+    WAL mode lets the API read cases while the worker writes them, instead of waiting for each other (it is stored
+    in the database file, so it is set up once). 30 s for a lock before giving up.
+    """
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(DB_PATH, timeout=30)
     con.row_factory = sqlite3.Row
     try:
-        con.executescript(SCHEMA)
+        if DB_PATH not in _ready:
+            con.executescript(SCHEMA)
+            con.execute("PRAGMA journal_mode=WAL")
+            _ready.add(DB_PATH)
         with con:
             yield con
     finally:
@@ -116,6 +126,12 @@ def flagged_ids():
 def case_ids():
     with connect() as con:
         return {r["complaint_id"] for r in con.execute("SELECT complaint_id FROM cases")}
+
+
+def has_case(complaint_id):
+    """Whether a case exists, without loading it (the intake checks this on every POST)."""
+    with connect() as con:
+        return con.execute("SELECT 1 FROM cases WHERE complaint_id = ?", (complaint_id,)).fetchone() is not None
 
 
 def get_case(complaint_id):
