@@ -139,7 +139,11 @@ def approve(complaint_id, officer, reply_text=None):
 
 
 def reject(complaint_id, officer, note=""):
+    """Officer rejects the drafted reply; nothing is sent. Only for a case waiting in a queue, like approve()."""
     with connect() as con:
+        row = con.execute("SELECT status FROM cases WHERE complaint_id = ?", (complaint_id,)).fetchone()
+        if not row or row["status"] not in ("PENDING_APPROVAL", "FRAUD_QUEUE"):
+            raise ValueError(f"{complaint_id} is not waiting for approval")
         con.execute("UPDATE cases SET status='REJECTED', updated_at=? WHERE complaint_id=?", (_now(), complaint_id))
         audit(con, complaint_id, officer, "rejected", note)
 

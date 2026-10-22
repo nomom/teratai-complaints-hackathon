@@ -86,7 +86,10 @@ def approve(complaint_id: str, body: ApprovalIn):
 
 @app.post("/cases/{complaint_id}/reject")
 def reject(complaint_id: str, body: ApprovalIn):
-    store.reject(complaint_id, body.officer, body.note)
+    try:
+        store.reject(complaint_id, body.officer, body.note)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
     return store.get_case(complaint_id)
 
 
