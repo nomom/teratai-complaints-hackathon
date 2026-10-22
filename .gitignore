@@ -15,3 +15,5 @@ runtime/
 inbox/
 submissions/*/predictions_train*.csv
 submissions/*/predictions_all*.csv
+
+tmp/

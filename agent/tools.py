@@ -5,6 +5,8 @@ These are also the functions an LLM may call as tools (see agent/llm.py TOOL_SPE
 from __future__ import annotations
 
 import datetime as dt
+import functools
+import re
 import sys
 import threading
 from pathlib import Path
@@ -50,6 +52,12 @@ def get_account(account_id):
 
 def age_on(customer_id, day: dt.date) -> int:
     return _starter.age_on(get_customer(customer_id)["date_of_birth"], day)
+
+
+@functools.lru_cache(maxsize=1)
+def town_words() -> frozenset:
+    """Lower-case words of every customer's city ("Bayan Lepas" -> bayan, lepas). Built once."""
+    return frozenset(w for c in get_db().customers.values() for w in re.findall(r"[a-z0-9]+", c["city"].lower()))
 
 
 def find_debits(customer_id, since: dt.datetime, until: dt.datetime, channels=None):

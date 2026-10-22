@@ -3,10 +3,12 @@
 Approach: take the customer's debits in the 45-day window for the category's channels, drop the ones that
 contradict a hard clue (amount, card), then score the rest on soft clues (date, name). Ties are flagged, not hidden.
 
+Done: approximate-amount tolerance tuned on training (20%); town words no longer count as a name match.
+
 TODO(A):
-  - tune the approximate-amount tolerance on training data
-  - better name matching (partial, lower-case, ATM location, biller)
+  - better name matching (partial, ATM location, biller)
   - DUPLICATE_CHARGE: when several twin pairs exist, use the date/amount to pick the pair
+  - FEE_DISPUTE: "I thought the fee is only RM10" quotes the expected fee, not the charged one (CMP-02357)
 """
 from __future__ import annotations
 
@@ -28,7 +30,7 @@ CHANNELS = {
 }
 FEE_PREFIX = {"MONTHLY_SERVICE": "Monthly service charge", "DEBIT_ANNUAL": "Debit card annual fee",
               "CC_ANNUAL": "Credit card annual fee"}
-APPROX_TOLERANCE = 0.05      # "about RM1,400" may be RM1,383.20
+APPROX_TOLERANCE = 0.20      # "about RM250" may be RM227.11; tuned on train (0.05 left 23 NO_MATCH)
 
 
 @dataclass
@@ -45,7 +47,9 @@ def _name_hit(t, ex: Extraction, text: str) -> bool:
     if ex.counterparty and (ex.counterparty.lower() in name or name in ex.counterparty.lower()):
         return True
     # No extracted name: does a distinctive word of this merchant appear in the complaint text?
-    words = [w for w in re.findall(r"[a-z0-9]+", name) if len(w) >= 4 and w not in {"bank", "berhad", "sdn", "bhd"}]
+    # Town words don't count: "Melaka" is in every Melaka shop's name, and "lepas" (Bayan Lepas) also means "last".
+    words = [w for w in re.findall(r"[a-z0-9]+", name)
+             if len(w) >= 4 and w not in {"bank", "berhad", "sdn", "bhd"} and w not in tools.town_words()]
     return any(re.search(rf"\b{re.escape(w)}\b", text) for w in words)
 
 
