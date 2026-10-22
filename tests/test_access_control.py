@@ -1,5 +1,5 @@
 """Access control: customer sign-up, login for all four roles, tokens, and who sees which case.
-Runs on temp copies of data/staff.csv and data/customers.csv, so the real files are never written."""
+Runs on temp copies of data/staff.csv and data/customers.csv and a temp customer_accounts.csv, so no real file is written."""
 import shutil
 import tempfile
 import unittest
@@ -18,7 +18,9 @@ class AccessControl(unittest.TestCase):
         self.customers = tmp / "customers.csv"
         shutil.copy(DATA / "staff.csv", tmp / "staff.csv")
         shutil.copy(DATA / "customers.csv", self.customers)
-        for name, path in (("STAFF_CSV", tmp / "staff.csv"), ("CUSTOMERS_CSV", self.customers)):
+        self.signups = tmp / "customer_accounts.csv"                     # absent until the first sign-up
+        for name, path in (("STAFF_CSV", tmp / "staff.csv"), ("CUSTOMERS_CSV", self.customers),
+                           ("CUSTOMER_ACCOUNTS_CSV", self.signups)):
             patcher = mock.patch.object(accounts, name, path)
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -42,14 +44,18 @@ class AccessControl(unittest.TestCase):
         self.assertEqual(auth.check_customer_id(" cus-00150 ").username, "CUS-00150")
         self.assertRefused("PASSWORD_TOO_SHORT", auth.sign_up, "CUS-00150", "abc")
 
-        before = self.customers.read_text(encoding="utf-8").splitlines()
+        self.assertFalse(self.signups.exists())
+        before = self.customers.read_bytes()
         auth.sign_up("CUS-00150", "secret1")
-        after = self.customers.read_text(encoding="utf-8").splitlines()
+        auth.sign_up("CUS-00001", "secret2")
+        self.assertEqual(self.customers.read_bytes(), before)                   # the organisers' data is untouched
+        rows = self.signups.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(rows[0], "customer_id,full_name,password")
+        self.assertEqual([r.split(",")[:2] for r in rows[1:]],
+                         [["CUS-00150", "Ravi a/l Rajan"], ["CUS-00001", "Chan Zhi Hao"]])
         stored = accounts.get_customer("CUS-00150").password_hash
-        self.assertTrue(stored.startswith("pbkdf2_sha256$"))           # filled, and not the password itself
-        self.assertNotIn("secret1", self.customers.read_text(encoding="utf-8"))
-        changed = [i for i, (a, b) in enumerate(zip(before, after)) if a != b]
-        self.assertEqual((len(after), len(changed)), (len(before), 1))   # only that customer's row changed
+        self.assertTrue(stored.startswith("pbkdf2_sha256$"))           # a hash, not the password itself
+        self.assertNotIn("secret1", self.signups.read_text(encoding="utf-8"))
 
         self.assertRefused("ALREADY_SIGNED_UP", auth.sign_up, "CUS-00150", "another")
         self.assertRefused("INVALID_CREDENTIALS", auth.login, "CUS-00150", "wrong")

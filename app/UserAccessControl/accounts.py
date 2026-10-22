@@ -1,10 +1,12 @@
-"""Owner: C. Accounts, kept in the data CSVs.
+"""Owner: C. Accounts, kept in CSVs.
 
-    data/staff.csv       seeded staff: one officer, one fraud analyst, one manager (password 1234 for all three)
-    data/customers.csv   every bank customer; the `password` column is empty until the customer signs up
+    data/staff.csv               seeded staff: one officer, one fraud analyst, one manager (password 1234 for all three)
+    data/customers.csv           the bank's customers (organiser data): who may sign up, and their names. Read only.
+    data/customer_accounts.csv   customer_id, full_name, password: one row per customer who has signed up.
+                                 Created on the first sign-up; git-ignored, so each laptop keeps its own sign-ups.
 
 Both password columns hold PBKDF2 hashes (see passwords.py), never the password itself.
-STAFF_CSV and CUSTOMERS_CSV override the paths (the tests point them at copies).
+STAFF_CSV, CUSTOMERS_CSV and CUSTOMER_ACCOUNTS_CSV override the paths (the tests point them at copies).
 """
 import csv
 import os
@@ -18,8 +20,10 @@ from app.UserAccessControl.roles import CUSTOMER
 ROOT = Path(__file__).resolve().parents[2]
 STAFF_CSV = Path(os.environ.get("STAFF_CSV", ROOT / "data" / "staff.csv"))
 CUSTOMERS_CSV = Path(os.environ.get("CUSTOMERS_CSV", ROOT / "data" / "customers.csv"))
+CUSTOMER_ACCOUNTS_CSV = Path(os.environ.get("CUSTOMER_ACCOUNTS_CSV", ROOT / "data" / "customer_accounts.csv"))
+ACCOUNT_FIELDS = ["customer_id", "full_name", "password"]
 
-_write_lock = threading.Lock()      # one signup at a time rewrites customers.csv
+_write_lock = threading.Lock()      # one sign-up at a time appends to customer_accounts.csv
 
 
 class AlreadySignedUp(Exception):
@@ -64,11 +68,19 @@ def get_staff(username: str) -> Optional[Account]:
     return None
 
 
+def _password_hash(customer_id: str) -> str:
+    """The customer's stored hash, or "" if they haven't signed up (or nobody has yet: no file)."""
+    if not CUSTOMER_ACCOUNTS_CSV.exists():
+        return ""
+    return next((r["password"] for r in _read(CUSTOMER_ACCOUNTS_CSV)[1] if r["customer_id"] == customer_id), "")
+
+
 def get_customer(customer_id: str) -> Optional[Account]:
+    """A customer of the bank (customers.csv), with their password hash if they have signed up."""
     cid = normalise_customer_id(customer_id)
     for r in _read(CUSTOMERS_CSV)[1]:
         if r["customer_id"] == cid:
-            return Account(cid, CUSTOMER, r["full_name"], r.get("password") or "")
+            return Account(cid, CUSTOMER, r["full_name"], _password_hash(cid))
     return None
 
 
@@ -78,24 +90,19 @@ def find(username: str) -> Optional[Account]:
 
 
 def set_customer_password(customer_id: str, password_hash: str):
-    """Fill this customer's empty password cell. Raises KeyError if not a customer, AlreadySignedUp if already set.
-
-    Rewrites customers.csv through a temp file, so a crash never leaves it half written; every other cell is kept.
-    """
+    """Sign the customer up: append (customer_id, full_name, password hash) to customer_accounts.csv.
+    Raises KeyError if not a customer, AlreadySignedUp if they already have a row. customers.csv is never written."""
     cid = normalise_customer_id(customer_id)
     with _write_lock:
-        fields, rows = _read(CUSTOMERS_CSV)
-        if "password" not in fields:
-            fields.append("password")
-        row = next((r for r in rows if r["customer_id"] == cid), None)
-        if row is None:
+        customer = get_customer(cid)
+        if customer is None:
             raise KeyError(cid)
-        if row.get("password"):
+        if customer.signed_up:
             raise AlreadySignedUp(cid)
-        row["password"] = password_hash
-        tmp = CUSTOMERS_CSV.with_name(CUSTOMERS_CSV.name + ".tmp")
-        with open(tmp, "w", newline="", encoding="utf-8") as fh:
-            writer = csv.DictWriter(fh, fields, restval="")
-            writer.writeheader()
-            writer.writerows(rows)
-        os.replace(tmp, CUSTOMERS_CSV)
+        new_file = not CUSTOMER_ACCOUNTS_CSV.exists()
+        CUSTOMER_ACCOUNTS_CSV.parent.mkdir(parents=True, exist_ok=True)
+        with open(CUSTOMER_ACCOUNTS_CSV, "a", newline="", encoding="utf-8") as fh:
+            writer = csv.DictWriter(fh, ACCOUNT_FIELDS)
+            if new_file:
+                writer.writeheader()
+            writer.writerow({"customer_id": cid, "full_name": customer.full_name, "password": password_hash})
