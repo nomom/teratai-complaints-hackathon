@@ -29,7 +29,7 @@ The contracts between you are in `agent/schemas.py` (`Extraction`, `Decision`, `
 
 One [uv](https://docs.astral.sh/uv/) project for the whole repo: `pyproject.toml` and `uv.lock` at the root pin the exact packages (`anthropic`, `openai`, `fastapi`, `uvicorn`, `streamlit`) and Python 3.12, so all three laptops run the same thing. Install uv once with `pip install uv`, or `powershell -c "irm https://astral.sh/uv/install.ps1 | iex"`.
 
-**Windows, quickest start:** double-click `run.bat` in the repo root. It installs uv if it is missing, runs `uv sync`, creates `.env` from `.env.example` on the first run, starts the worker, the API and the dashboard in three windows, and opens http://localhost:8501.
+**Quickest start:** on Windows, double-click `run.bat` in the repo root. On macOS or Linux, run `./run.sh`. Both install uv if it is missing, run `uv sync`, create `.env` from `.env.example` on the first run, start the worker, the API and the dashboard, and open http://localhost:8501. `run.bat` uses three windows; `run.sh` uses one terminal, and Ctrl+C stops all three processes.
 
 **Everyone, from the repo root:**
 
