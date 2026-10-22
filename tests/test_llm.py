@@ -8,6 +8,7 @@ import os
 os.environ["PYTHON_DOTENV_DISABLED"] = "1"   # tests never read .env ...
 os.environ["LLM_PROVIDER"] = ""              # ... and never call a real LLM (LLM tests swap in fake clients)
 
+import datetime as dt
 import json
 import tempfile
 import unittest
@@ -376,6 +377,44 @@ class CaseLifecycle(LLMTestCase):
         self.store.DB_PATH = self._db
         self._tmp.cleanup()
         super().tearDown()
+
+    def pending_atm_case(self):
+        """CMP-00244: ATM shortfall, refund RM550.00 (over RM500), so it waits for an officer."""
+        rec = process_complaint(tools.get_db().complaints["CMP-00244"])
+        self.assertEqual(rec.status, "PENDING_APPROVAL")
+        self.store.save_case(rec)
+        return rec
+
+    def test_officer_edit_that_invents_facts_is_not_sent(self):
+        rec = self.pending_atm_case()
+        bad = "We have refunded RM600.00 for transaction TXN-0088299."             # the README's example
+        with self.assertRaises(self.store.ReplyCheckFailed) as caught:
+            self.store.approve("CMP-00244", "officer1", bad)
+        self.assertTrue(any("TXN-0088299" in p for p in caught.exception.problems))
+        case = self.store.get_case("CMP-00244")
+        self.assertEqual((case["status"], case["reply_text"]), ("PENDING_APPROVAL", rec.reply_text))  # nothing sent
+        self.assertEqual(case["audit"][-1]["action"], "approval_blocked")
+
+    def test_officer_edit_naming_another_of_the_customers_transactions_is_not_sent(self):
+        rec = self.pending_atm_case()
+        received = tools.received(rec.complaint.__dict__)
+        other = next(t for t in tools.get_db().txns_by_customer[rec.complaint.customer_id]   # real, in the window,
+                     if received - dt.timedelta(days=45) <= t["time"] <= received            # but not this case's
+                     and t["txn_id"] not in {rec.decision.matched_txn_id, *rec.decision.candidates})
+        edited = rec.reply_text.replace(rec.decision.matched_txn_id, other["txn_id"])
+        with self.assertRaises(self.store.ReplyCheckFailed) as caught:
+            self.store.approve("CMP-00244", "officer1", edited)
+        self.assertIn(f"transaction {other['txn_id']} is not part of this case's evidence", caught.exception.problems)
+
+    def test_officer_can_send_a_correct_edit_or_the_draft(self):
+        rec = self.pending_atm_case()
+        edited = rec.reply_text.replace("We apologise for the inconvenience.", "We are sorry for the trouble this caused.")
+        self.assertNotEqual(edited, rec.reply_text)
+        self.store.approve("CMP-00244", "officer1", edited)
+        case = self.store.get_case("CMP-00244")
+        self.assertEqual((case["status"], case["reply_text"]), ("APPROVED", edited))
+        self.assertEqual(case["record"]["reply_text"], rec.reply_text)            # the agent's draft is kept
+        self.assertEqual([a["action"] for a in case["audit"]][-2:], ["approved", "reply_sent"])
 
     def test_awaiting_customer_has_no_decision_until_the_reply(self):
         first = self.complaint("Hi, I have a problem with my account. Please help.", cid="TEST-LC")

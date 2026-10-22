@@ -54,8 +54,11 @@ def show_case(case, actions=False):
         officer = st.text_input("Officer", "officer1", key=f"o-{case['complaint_id']}")
         a, b = st.columns(2)
         if a.button("Approve and send", key=f"a-{case['complaint_id']}"):
-            store.approve(case["complaint_id"], officer, text if text != case["reply_text"] else None)
-            st.rerun()
+            try:
+                store.approve(case["complaint_id"], officer, text if text != case["reply_text"] else None)
+                st.rerun()
+            except store.ReplyCheckFailed as e:
+                st.error("Not sent: the reply failed the self-check.\n\n" + "\n".join(f"- {p}" for p in e.problems))
         if b.button("Reject", key=f"x-{case['complaint_id']}"):
             store.reject(case["complaint_id"], officer)
             st.rerun()

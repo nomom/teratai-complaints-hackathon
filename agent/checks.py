@@ -18,6 +18,10 @@ def check(complaint: dict, decision: Decision, reply: str, lang: str) -> list[st
     """Return a list of problems; empty means VERIFIED."""
     tools.register_complaint(complaint)
     problems = _starter_check.check_reply(tools.get_db(), complaint["complaint_id"], reply)
+    # The starter check allows any of the customer's transactions in the window; a reply may only name this case's
+    for tid in sorted(set(re.findall(r"TXN-\d{7}", reply)) - case_txn_ids(decision)):
+        if not any(tid in p for p in problems):
+            problems.append(f"transaction {tid} is not part of this case's evidence")
 
     amounts = {round(float(a.replace(",", "")), 2) for a in re.findall(r"RM\s?([\d,]+(?:\.\d{1,2})?)", reply)}
     if decision.outcome == "REFUND" and round(decision.refund_amount_myr, 2) not in amounts:
@@ -33,6 +37,13 @@ def check(complaint: dict, decision: Decision, reply: str, lang: str) -> list[st
     if decision.outcome in ("INFO_ONLY", "") and REFUND_TALK.search(reply):
         problems.append("reply talks about a refund, but there is no money decision on this case")
     return problems
+
+
+def case_txn_ids(decision: Decision) -> set[str]:
+    """Transactions this case is about: the match, its twin or reversal, and the candidates matching considered."""
+    ids = {decision.matched_txn_id, *decision.candidates}
+    ids |= {(decision.evidence.get(k) or {}).get("txn_id") for k in ("txn", "twin", "reversal")}
+    return ids - {"", None}
 
 
 AGE = re.compile(r"\b(aged?|umur|berumur|usia)\s*:?\s*\d{1,3}\b|\b\d{1,3}\s*(years? old|tahun)\b|"

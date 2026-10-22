@@ -94,24 +94,48 @@ def get_case(complaint_id):
         return case
 
 
+class ReplyCheckFailed(ValueError):
+    """The reply an officer tried to send failed the self-check; nothing was sent."""
+
+    def __init__(self, problems):
+        self.problems = problems
+        super().__init__("reply failed the self-check: " + "; ".join(problems))
+
+
+def recheck(case_row, text):
+    """The agent's self-check (agent/checks.py) on the reply about to go out, against the case's own decision."""
+    from agent import checks                     # lazy: loading the agent reads the bank data
+    from agent.schemas import Decision
+    rec = json.loads(case_row["record"]) if isinstance(case_row["record"], str) else case_row["record"]
+    return checks.check(rec["complaint"], Decision(**rec["decision"]), text, case_row["reply_language"])
+
+
 def approve(complaint_id, officer, reply_text=None):
     """Officer approves (optionally edits) the reply; only now does it count as sent.
+
+    The self-check runs again on the exact text going out, edited or not: an officer's reply is held to the same
+    standard as the agent's. A failing reply is not sent (ReplyCheckFailed) and the attempt is audited.
+    The agent's original draft stays in `record`; the column holds what was actually sent.
 
     An undecided case lands here only when its follow-up question failed the self-check. Once the officer approves
     the question, the case waits for the customer instead of closing.
     """
     with connect() as con:
-        row = con.execute("SELECT status, outcome, reply_text FROM cases WHERE complaint_id = ?",
+        row = con.execute("SELECT status, outcome, reply_text, reply_language, record FROM cases WHERE complaint_id = ?",
                           (complaint_id,)).fetchone()
         if not row or row["status"] not in ("PENDING_APPROVAL", "FRAUD_QUEUE"):
             raise ValueError(f"{complaint_id} is not waiting for approval")
         text = reply_text or row["reply_text"]
-        decided = bool(row["outcome"])
-        # TODO(C): re-run agent.checks.check on an edited reply before sending
-        con.execute("UPDATE cases SET status=?, reply_text=?, updated_at=? WHERE complaint_id=?",
-                    ("APPROVED" if decided else "AWAITING_CUSTOMER", text, _now(), complaint_id))
-        audit(con, complaint_id, officer, "approved", "edited" if reply_text else "as drafted")
-        audit(con, complaint_id, officer, "reply_sent" if decided else "question_sent", text)
+        problems = recheck(row, text)
+        if not problems:
+            decided = bool(row["outcome"])
+            con.execute("UPDATE cases SET status=?, reply_text=?, updated_at=? WHERE complaint_id=?",
+                        ("APPROVED" if decided else "AWAITING_CUSTOMER", text, _now(), complaint_id))
+            audit(con, complaint_id, officer, "approved", "edited" if reply_text else "as drafted")
+            audit(con, complaint_id, officer, "reply_sent" if decided else "question_sent", text)
+            return
+    log(complaint_id, officer, "approval_blocked", {"problems": problems, "edited": bool(reply_text), "text": text})
+    raise ReplyCheckFailed(problems)
 
 
 def reject(complaint_id, officer, note=""):

@@ -122,7 +122,7 @@ Goal: category and language near 100%; replies a bank would send; a self-check j
 - [ ] Measure the cross-check's second look: in 214 real-LLM complaints it never triggered (LLM and rules agreed, or the rules had no keyword). Needs adversarial cases to measure fixes vs flips
 - [x] Replies: the drafter only sees customer-safe facts and a plain explanation from code (`reply.customer_why`), never the internal reasons or the customer's age; Markdown is stripped; fraud replies say "under review", never "confirmed fraud"; no refund talk on service complaints. Templates use the same explanations in EN and MS
 - [ ] SLA timeline in replies (`tools.sla(priority)`)
-- [x] `checks.py` also rejects: the customer's age or date of birth, declaring fraud before review, refund talk with no money decision. 0 of 200 real-LLM first drafts were rejected
+- [x] `checks.py` also rejects: transaction IDs outside this case's evidence (the starter check allows any of the customer's), the customer's age or date of birth, declaring fraud before review, refund talk with no money decision. 0 of 200 real-LLM first drafts were rejected
 - [ ] Keep trying to break `checks.py` like a judge would (edited replies especially)
 - [x] LLM reliability: timeouts, SDK retries, a per-complaint call/token budget, and every failure recorded by kind (`timeout`, `refusal`, `bad_json`, ...) with a fallback to rules/templates. Tests in `tests/test_llm.py` use fake clients (no key, no cost)
 - [x] Intents: vague complaints get a follow-up question (the case stays open as `AWAITING_CUSTOMER` with no decision until the customer replies), off-topic messages get a polite answer (`ANSWERED`). Possible fraud never waits; after 2 unanswered follow-ups an officer takes over
@@ -134,7 +134,7 @@ Goal: the live round works without a hitch; test predictions in early.
 
 - [ ] `uv sync` (see Setup), run the worker + UI (+ API) for the first time, fix what breaks (they haven't been run yet)
 - [ ] Push one complaint down each path: auto-resolved refund, decline → approval queue, refund > RM500 → approval queue, fraud → fraud queue. Approve and reject update the audit log
-- [ ] Re-run the self-check on an officer's edited reply before it is sent (`TODO(C)` in `store.approve`)
+- [x] *(done by B, please review)* `store.approve` re-runs the self-check on the exact reply going out, edited or not. A failing reply is not sent: `ReplyCheckFailed` (API: `422` with the problems; dashboard: an error under the button), and an `approval_blocked` audit entry. The agent's original draft stays in the case record
 - [ ] Case page clearly shows why it decided, timing per step, and cost (engineering score)
 - [ ] *Optional, decide at Checkpoint 2:* a React frontend (see "Frontend: Streamlit or React" below)
 - [ ] **Live-round intake:** judges hand us `complaints.csv` rows (`complaint_id, customer_id, received_at, channel, subject, text`, IDs `LIVE-01`…, received on 30 Sep 2026), which must go in with no code changes. The API already takes all six fields; the Streamlit form needs `complaint_id` and `subject` fields, and ideally a "paste a CSV row" box (or a script that drops a CSV file's rows into `inbox/`)
@@ -145,7 +145,7 @@ Goal: the live round works without a hitch; test predictions in early.
 A separate award, see [docs/bonus_platform.md](docs/bonus_platform.md) and the summary in [END_GOAL.md](END_GOAL.md). In order:
 
 - [ ] **Never overwrite the agent's decision.** `store.approve` currently replaces `reply_text` with the officer's edit. Keep the agent's fields as they were and store what staff did (`final_action`, final reply) separately. The `predictions.csv` export must stay the agent's output
-- [ ] **Self-check on edited replies** before "send" unlocks (also the `TODO(C)` above)
+- [x] **Self-check on edited replies** (done, see above)
 - [ ] **Audit with old → new values and a reason** for every action that changes the agent's decision
 - [ ] **Roles:** seeded `users` (`officer`, `fraud`, `manager`, with `approval_limit_myr`); each sees only their queue, sorted by priority and SLA due time
 - [ ] **Two-tier approval:** over the officer's limit or sensitive → `ESCALATED`, waits for the manager. Fraud analyst actions: acknowledge → log investigation / recall → record outcome
@@ -172,7 +172,7 @@ The React app is only a client of `app/api.py`. The agent, worker and store don'
 | Submit a complaint | `POST /complaints` → `{complaint_id}`, then poll `GET /cases/{id}` until it returns 200 |
 | Approval / fraud queue | `GET /cases?status=PENDING_APPROVAL` / `GET /cases?status=FRAUD_QUEUE` |
 | Case detail (decision, evidence, trace, audit log) | `GET /cases/{id}` |
-| Approve / reject | `POST /cases/{id}/approve` / `POST /cases/{id}/reject` with `{officer, reply_text?, note?}` |
+| Approve / reject | `POST /cases/{id}/approve` / `POST /cases/{id}/reject` with `{officer, reply_text?, note?}`. Approve returns `422` with `detail.problems` when the reply fails the self-check (nothing is sent) |
 | Queue counts | `GET /stats` |
 | Awaiting customer / customer's answer | `GET /cases?status=AWAITING_CUSTOMER` / `POST /cases/{id}/messages` with `{text}` |
 

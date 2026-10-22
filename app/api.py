@@ -77,6 +77,8 @@ def case(complaint_id: str):
 def approve(complaint_id: str, body: ApprovalIn):
     try:
         store.approve(complaint_id, body.officer, body.reply_text)
+    except store.ReplyCheckFailed as e:          # nothing sent: the officer must fix the reply
+        raise HTTPException(422, {"error": "reply failed the self-check", "problems": e.problems})
     except ValueError as e:
         raise HTTPException(409, str(e))
     return store.get_case(complaint_id)
