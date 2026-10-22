@@ -102,6 +102,7 @@ Goal: txn, outcome and refund near 100% with `run_batch --split train --oracle-c
 
 - [ ] Fix the 23 `NO_MATCH` cases: open `predictions_train_details.csv`, run `python starter/evidence_pack.py <id>`, find what broke (date phrase, amount tolerance, card last-4)
 - [ ] Fix the ~4% wrong transactions on DUPLICATE_CHARGE and FAILED_TRANSFER (several similar candidates: weigh date, amount and name better)
+- [x] *(done by B, please review)* A candidate needs at least one real clue (amount, card, date, name, fee, twin), else `NO_MATCH`. Before, "My DuitNow transfer failed, please help" with no amount or date matched the customer's only transfer and auto-refunded it: no date phrase resolves to the whole window, which had counted as a date clue. No change on train or test predictions; regression test in `tests/test_core.py`
 - [ ] Grow `dates.py` with the phrases you find ("minggu lepas", "awal bulan", "last weekend", ...)
 - [ ] Check `fee_due()` edge cases: card opened 29 Feb, customer turning 60 the month of the fee, a fee with no matching product
 - [ ] Unit tests for boundaries: refund RM500.00 vs RM500.01, age 65 on the received date, duplicates exactly 10 minutes apart

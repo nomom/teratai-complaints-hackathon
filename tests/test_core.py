@@ -38,6 +38,24 @@ class EndToEnd(unittest.TestCase):
         rec = process_complaint(db.complaints["CMP-00387"])
         self.assertEqual((rec.decision.outcome, rec.decision.route), ("INVESTIGATE", "FRAUD_TEAM"))
 
+    def test_no_clue_never_pins_a_transaction(self):
+        # CUS-00150 has exactly one transfer (TXN-0145614) in the window. Nothing in these messages points at it,
+        # so neither may be matched to it, let alone refunded on it.
+        tools.get_db()
+        for text in ["My DuitNow transfer failed, please help.", "what's the weather today? lol safe account"]:
+            with self.subTest(text=text):
+                rec = process_complaint({"complaint_id": "T-NOCLUE", "customer_id": "CUS-00150", "channel": "App chat",
+                                         "received_at": "2026-09-30 10:00", "subject": "", "text": text})
+                d = rec.decision
+                self.assertEqual((d.matched_txn_id, d.refund_amount_myr), ("", 0.0))
+                self.assertIn("NO_MATCH", d.flags)
+                self.assertNotEqual(d.route, "AUTO_RESOLVE")          # a person looks at it
+                self.assertIn("TXN-0145614", d.candidates)             # still shown to the officer as a candidate
+        rec = process_complaint({"complaint_id": "T-CLUE", "customer_id": "CUS-00150", "channel": "App chat",
+                                 "received_at": "2026-09-30 10:00", "subject": "",
+                                 "text": "My DuitNow transfer of RM46.54 failed, please help."})
+        self.assertEqual(rec.decision.matched_txn_id, "TXN-0145614")   # one real clue is enough
+
     def test_self_check_catches_invented_facts(self):
         db = tools.get_db()
         c = db.complaints["CMP-00244"]

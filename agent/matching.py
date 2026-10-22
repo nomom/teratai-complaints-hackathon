@@ -85,7 +85,8 @@ def find_transaction(complaint: dict, ex: Extraction) -> Match:
                 continue
             if t["card_last4"] == ex.card_last4:
                 s += 2; why.append("card")
-        if dates.contains(t["time"].date()):
+        # No date in the message resolves to the whole window, which every candidate is in: that is not a clue
+        if dates.rule != "whole window" and dates.contains(t["time"].date()):
             s += 3 if dates.exact else 1; why.append(f"date ({dates.rule})")
         if _name_hit(t, ex, text):
             s += 2; why.append("name")
@@ -104,8 +105,12 @@ def find_transaction(complaint: dict, ex: Extraction) -> Match:
         return Match(None, flags=["NO_MATCH"], reasons=[f"No {ex.category} candidate in the window fits the clues"])
     scored.sort(key=lambda x: x[0], reverse=True)
     best_s, best, why = scored[0]
-    m = Match(best, candidates=[(round(s, 2), t["txn_id"]) for s, t, _ in scored[:5]],
-              reasons=[f"Matched {best['txn_id']} on: {', '.join(why) or 'only candidate'}"])
+    candidates = [(round(s, 2), t["txn_id"]) for s, t, _ in scored[:5]]
+    if not why:   # nothing in the message points at it: never pin a case (or a refund) on the only transaction around
+        return Match(None, candidates=candidates, flags=["NO_MATCH"],
+                     reasons=[f"No clue in the message (amount, date, name, card) supports any of the "
+                              f"{len(scored)} {ex.category} candidate(s) in the window"])
+    m = Match(best, candidates=candidates, reasons=[f"Matched {best['txn_id']} on: {', '.join(why)}"])
     if len(scored) > 1 and int(scored[1][0]) == int(best_s):
         m.flags.append("AMBIGUOUS_MATCH")
     return m
