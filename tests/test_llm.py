@@ -27,6 +27,10 @@ def stored(rec):
     return json.loads(json.dumps(rec.to_dict(), default=str))
 
 
+REFUND_REPLY = ("Dear Ravi,\n\nThank you for the details. Your DuitNow transfer TXN-0145614 did not go through, "
+                "so we will refund RM46.54 to your account.\n\nTeratai Bank Customer Care")
+
+
 def extraction(**over):
     d = {"intent": "COMPLAINT", "category": "SERVICE_QUALITY", "language": "EN", "confidence": "high",
          "missing_info": [], "amount": None, "amount_approx": False, "counterparty": "", "date_phrase": "",
@@ -190,7 +194,7 @@ class Intents(LLMTestCase):
         self.assertEqual(second["follow_ups"], 1)
         self.assertIn("[Customer follow-up]", second["text"])
         self.use(FakeOpenAI(extraction(category="FAILED_TRANSFER", amount=46.54, counterparty="Shalini a/p Nair",
-                                       date_phrase="yesterday")))
+                                       date_phrase="yesterday"), reply=REFUND_REPLY))
         rec = process_complaint(second)
         self.assertEqual((rec.decision.matched_txn_id, rec.decision.outcome, rec.decision.refund_amount_myr,
                           rec.status), ("TXN-0145614", "REFUND", 46.54, "RESOLVED"))
@@ -205,18 +209,35 @@ class Intents(LLMTestCase):
                          ("ANSWERED", "AUTO_RESOLVE", "SERVICE_QUALITY", 0.0))
         self.assertEqual(rec.check_problems, [])
 
-    def test_out_of_scope_reply_with_invented_amount_falls_back_to_template(self):
+    def test_draft_fixed_on_the_redraft_goes_out(self):
+        good = ("Thanks for your message! This channel handles complaints about your Teratai Bank accounts and "
+                "transactions. If you have a problem with your account, please tell us.\n\nTeratai Bank Customer Care")
+        self.use(FakeOpenAI(extraction(intent="OUT_OF_SCOPE"),
+                            reply=["Our fixed deposit rate is great, deposit RM12,345.67 today!", good]))
+        rec = process_complaint(self.complaint("What are your FD rates?", cid="TEST-OOS3"))
+        self.assertEqual((rec.status, rec.reply_text, rec.decision.flags), ("ANSWERED", good, []))
+        self.assertEqual(len(rec.decision.evidence["reply"]["rejected_drafts"]), 1)   # still recorded
+
+    def test_draft_failing_twice_goes_to_a_person(self):
+        """Build guide step 5: redraft once, then flag it for a human. Even a passing template isn't sent on its own."""
         self.use(FakeOpenAI(extraction(intent="OUT_OF_SCOPE"),
                             reply="Our fixed deposit rate is great, deposit RM12,345.67 today!"))
         rec = process_complaint(self.complaint("What are your FD rates?", cid="TEST-OOS2"))
-        self.assertEqual(rec.status, "ANSWERED")
-        self.assertNotIn("RM12,345.67", rec.reply_text)       # self-check rejected it; template sent instead
+        self.assertEqual((rec.status, rec.decision.route), ("PENDING_APPROVAL", "HUMAN_APPROVAL"))
+        self.assertIn("DRAFT_REJECTED", rec.decision.flags)
+        self.assertNotIn("RM12,345.67", rec.reply_text)       # the officer starts from the template, which passes
         self.assertEqual(rec.check_problems, [])
+        steps = {t["step"]: t.get("detail") for t in rec.trace}  # every check records its own result
+        self.assertEqual([t["step"] for t in rec.trace if t["step"] not in ("understand", "route")],
+                         ["draft_reply", "check", "redraft", "recheck", "standard_reply", "check_standard_reply"])
+        self.assertTrue(steps["check"]["problems"] and steps["recheck"]["problems"])   # both failures visible
+        self.assertEqual((steps["standard_reply"], steps["check_standard_reply"]),
+                         ({"source": "template"}, {"problems": []}))
         reply_record = rec.decision.evidence["reply"]          # both rejected LLM drafts are kept for the audit
         self.assertEqual((reply_record["source"], [r["source"] for r in reply_record["rejected_drafts"]]),
                          ("template", ["llm", "llm"]))
         self.assertIn("RM12,345.67", reply_record["rejected_drafts"][0]["text"])
-        self.assertEqual(case_summary(stored(rec))["why_here"], ["Answered automatically: not a banking complaint"])
+        self.assertIn("failed the self-check twice", case_summary(stored(rec))["why_here"][0])
 
     def test_vague_fraud_report_never_waits(self):
         self.use(FakeOpenAI(extraction(intent="NEEDS_DETAILS", category="SCAM_TRANSFER", missing_info=["amount"])))
@@ -511,7 +532,7 @@ class CaseLifecycle(LLMTestCase):
         second = follow_up_complaint(first, "My DuitNow transfer of RM46.54 to Shalini a/p Nair yesterday failed "
                                             "but the money was deducted.")
         self.use(FakeOpenAI(extraction(category="FAILED_TRANSFER", amount=46.54, counterparty="Shalini a/p Nair",
-                                       date_phrase="yesterday")))
+                                       date_phrase="yesterday"), reply=REFUND_REPLY))
         self.store.save_case(process_complaint(second))
         case = self.store.get_case("TEST-LC")
         self.assertEqual((case["status"], case["outcome"], case["route"], case["refund_amount_myr"], case["created_at"]),
