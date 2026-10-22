@@ -206,6 +206,20 @@ class Intents(LLMTestCase):
         self.assertEqual((ex.category, ex.amount, ex.counterparty), ("SCAM_TRANSFER", 4042.06, "Muthu"))
         self.assertIn("overridden", ex.source)
 
+    def test_everyday_words_never_override_llm(self):
+        cases = {   # the LLM is right; a loose scam word must not send these to the fraud queue
+            "I was charged twice by the courier for my parcel delivery, RM15 each.": "DUPLICATE_CHARGE",
+            "Someone scammed my card: RM500 at QUICKBUY that I did not make.": "UNAUTHORISED_CARD",
+            "My card was stolen and I reported it to a police officer, then saw RM300 I didn't make.": "UNAUTHORISED_CARD",
+            "I feel deceived by this RM12 annual fee on my debit card.": "FEE_DISPUTE",
+            "Please investigate: my DuitNow transfer of RM200 failed but money was deducted.": "FAILED_TRANSFER",
+        }
+        for text, category in cases.items():
+            with self.subTest(text=text[:40]):
+                self.use(FakeOpenAI(extraction(category=category)))
+                ex = extract.extract(self.complaint(text), llm.Usage())
+                self.assertEqual((ex.category, ex.source), (category, "llm"))
+
     def test_follow_ups_used_up_goes_to_officer(self):
         self.use(FakeOpenAI(extraction(intent="NEEDS_DETAILS", missing_info=["what_happened"])))
         rec = process_complaint(self.complaint("still a problem", cid="TEST-MAX", follow_ups=MAX_FOLLOW_UPS))

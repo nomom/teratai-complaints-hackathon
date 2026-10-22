@@ -109,7 +109,7 @@ Goal: txn, outcome and refund near 100% with `run_batch --split train --oracle-c
 ### B: LLM layer
 Goal: category and language near 100%; replies a bank would send; a self-check judges can't sneak past.
 
-- [x] **Scams classed as FAILED_TRANSFER (20, critical errors):** rule keywords added. When the LLM is on, scam wording found by the rules overrides an LLM category (a missed scam is worse than an extra investigation)
+- [x] **Scams classed as FAILED_TRANSFER (20, critical errors):** rule keywords added. When the LLM is on, only strong scam phrases ("safe account", "skim pelaburan", "online acquaintance"...) override its category; everyday words like "parcel" or "police" never do. Keywords match whole words only ("invest" no longer matches "investigate")
 - [x] ATM complaints classed as SERVICE_QUALITY (70): "withdrew", "mengeluarkan", "did not dispense", "duit tak keluar"
 - [x] Reply language (91 misses → 0): bigger EN/MS word lists; English counts only in lowercase, so names like "Shah Alam Branch" don't make Malay text MIXED. Tests in `tests/test_extract.py`
 - [ ] Turn the LLM on (`LLM_PROVIDER=anthropic`), run 100–200 train complaints, compare against the rules, record tokens and cost per complaint

@@ -17,18 +17,47 @@ from .schemas import CATEGORIES, CONFIDENCE, INTENTS, Extraction
 
 MISSING_INFO = ["what_happened", "transaction_type", "date", "amount", "merchant_or_recipient", "card_last4"]
 
-KEYWORDS = [  # checked in order: fraud first, so a scam that mentions a transfer is never a FAILED_TRANSFER
-    ("SCAM_TRANSFER", ["scam", "tipu", "police", "polis", "safe account", "akaun selamat", "parcel", "bungkusan", "invest",
-                       "part-time", "part time", "kerja sambilan", "emergency", "kecemasan", "romance", "lhdn", "court",
-                       "melabur", "pelaburan", "deceived", "acquaintance", "kenalan dalam talian"]),
-    ("ATM_NOT_DISPENSED", ["atm", "withdrew", "withdraw", "mengeluarkan", "dispense", "duit tak keluar",
-                           "wang tidak keluar", "did not give me the cash"]),
-    ("DUPLICATE_CHARGE", ["twice", "two times", "dua kali", "2 kali", "double"]),
-    ("UNAUTHORISED_CARD", ["did not make", "not authorise", "didn't make", "bukan saya", "tidak membuat", "tak buat",
-                           "disputes a card", "don't recognise", "do not recognise", "tidak kenal"]),
-    ("FEE_DISPUTE", ["fee", "charge", "caj", "yuran"]),
-    ("FAILED_TRANSFER", ["transfer", "pindah", "duitnow", "ibg"]),
+# Keywords are regex fragments matched as whole words, so "invest" never matches "investigate" and "atm" never
+# matches "treatment". Word endings that should count are spelled out, e.g. "transfer(s|red|ring)?".
+#
+# Scam wording comes in two strengths. Strong phrases name the scam itself; they are checked first, and they are the
+# only ones allowed to override the LLM (see _fraud_safety_net). Weak words ("parcel", "police", "emergency") also
+# turn up in ordinary complaints ("charged twice for my parcel"), so they are checked after the specific evidence.
+SCAM_STRONG = [  # the scam story itself: someone tricked the customer into sending money
+    r"safe account", r"akaun selamat", r"illegal (items?|parcel)", r"barang (haram|terlarang)",
+    r"money launder(ing)?", r"pengubahan wang haram",
+    r"(posing|pretending) as a police( officer)?", r"(said|claimed|claiming) (he|she|they) (was|were) a police officer",
+    r"mengaku (sebagai )?pegawai polis", r"kata dari polis",
+    r"investment (scheme|chat group)", r"skim pelaburan", r"melabur", r"(group|kumpulan) crypto", r"crypto group",
+    r"admin (hilang|disappeared|vanished)",
+    r"part[- ]time job", r"kerja sambilan",
+    r"deceived by (an? )?(caller|call|online|investment|part[- ]time|someone)", r"online acquaintance",
+    r"(someone|somebody) i met online", r"kenalan dalam talian", r"kawan online",
 ]
+SCAM_WEAK = [  # common in scam reports, but also in ordinary complaints ("someone scammed my card" is card fraud)
+    r"scam(med|mer|mers)?", r"(di)?tipu", r"penipuan", r"police", r"polis", r"parcel", r"bungkusan",
+    r"invest(ed|ing|ment|ments)?", r"emergency", r"kecemasan", r"romance", r"court", r"lhdn", r"deceived",
+]
+KEYWORDS = [  # checked in order
+    ("SCAM_TRANSFER", SCAM_STRONG),
+    ("ATM_NOT_DISPENSED", [r"atms?", r"withdr(ew|aw|awal|awn|awing)", r"mengeluarkan", r"dispensed?",
+                           r"duit tak keluar", r"wang tidak keluar", r"did not give me the cash"]),
+    ("DUPLICATE_CHARGE", [r"twice", r"two times", r"dua kali", r"2 kali", r"double"]),
+    ("UNAUTHORISED_CARD", [r"did not make", r"not authori[sz]e(d)?", r"didn't make", r"bukan saya", r"tidak membuat",
+                           r"tak buat", r"disputes a card", r"don't recognise", r"do not recognise", r"tidak kenal"]),
+    ("SCAM_TRANSFER", SCAM_WEAK),
+    ("FEE_DISPUTE", [r"fees?", r"charge(s|d)?", r"caj", r"yuran"]),
+    ("FAILED_TRANSFER", [r"transfer(s|red|ring)?", r"pindah\w*", r"duitnow", r"ibg"]),
+]
+
+
+def _any_word(patterns: list[str], low: str) -> bool:
+    return any(re.search(rf"(?<![a-z0-9]){p}(?![a-z0-9])", low) for p in patterns)
+
+
+def rules_category(text: str) -> str:
+    low = text.lower()
+    return next((c for c, words in KEYWORDS if _any_word(words, low)), "SERVICE_QUALITY")
 # Language: Malay words count anywhere; English words only in lowercase (or as the first word), because
 # capitalised English is usually part of a name ("Shah Alam Branch", "BETZONE ONLINE"). Colloquial messages that
 # mix the two ("app asyik logout sendiri 3 hari dah") are MIXED, and get a reply in the preferred language.
@@ -74,7 +103,7 @@ def reply_language(complaint: dict, written: str) -> str:
 def extract_rules(complaint: dict) -> Extraction:
     text = (complaint.get("subject", "") + " " + complaint["text"]).strip()
     low = text.lower()
-    category = next((c for c, words in KEYWORDS if any(w in low for w in words)), "SERVICE_QUALITY")
+    category = rules_category(text)
 
     amount, approx = None, False
     m = re.search(rf"({APPROX})?RM\s?([\d,]+(?:\.\d{{1,2}})?)", text, re.I)
@@ -219,10 +248,14 @@ def extract(complaint: dict, usage: llm.Usage | None = None) -> Extraction:
 
 
 def _fraud_safety_net(complaint: dict, ex: Extraction) -> Extraction:
-    """Scam wording outranks the LLM: a missed scam is a critical error and the worst outcome for the customer,
-    while a wrongly suspected one only costs an investigator's look. Off-topic messages are left alone."""
+    """Strong scam wording outranks the LLM: a missed scam is a critical error and the worst outcome for the customer.
+
+    Only SCAM_STRONG phrases count. A false override sends a genuine complaint to the fraud queue with no refund,
+    so weak words like "parcel" or "police" never override. Off-topic messages are left alone.
+    """
     if ex.category != "SCAM_TRANSFER" and ex.intent != "OUT_OF_SCOPE":
-        if extract_rules(complaint).category == "SCAM_TRANSFER":
+        text = f"{complaint.get('subject', '')} {complaint['text']}".lower()
+        if _any_word(SCAM_STRONG, text):
             ex.category, ex.intent = "SCAM_TRANSFER", "COMPLAINT"
             ex.source = "llm (scam wording: category overridden by rules)"
     return ex
