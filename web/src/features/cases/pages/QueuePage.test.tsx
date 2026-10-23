@@ -1,12 +1,15 @@
 import { screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { QUEUE_REFRESH_MS } from '@/features/cases/hooks';
 import { installFakeApi } from '@/test/fakeApi';
 import { renderApp } from '@/test/renderApp';
 
 const openCase = () => screen.findByRole('article', { name: /^Case / });
 
 describe('approval queue', () => {
+  afterEach(() => vi.useRealTimers());
+
   it('lists every case, the highest priority first, with that case opened below', async () => {
     installFakeApi();
     renderApp('/approval', { as: 'officer1' });
@@ -16,6 +19,18 @@ describe('approval queue', () => {
     expect(rows.map((r) => within(r).getAllByRole('cell')[1].textContent)).toEqual(['CMP-P1', 'CMP-P3']);
     expect(await openCase()).toHaveAccessibleName('Case CMP-P1');
     expect(rows[0]).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('shows a complaint that arrives through the API without anyone clicking', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const api = installFakeApi();
+    renderApp('/approval', { as: 'officer1' });
+    expect(await screen.findByRole('heading', { name: 'Approval queue (2)' })).toBeInTheDocument();
+    // the live round posts straight to the API; the worker stores the decided case
+    api.cases.push({ ...structuredClone(api.cases.find((c) => c.complaint_id === 'CMP-P3')!), complaint_id: 'LIVE-NEW' });
+    await vi.advanceTimersByTimeAsync(QUEUE_REFRESH_MS + 100);
+    expect(await screen.findByRole('cell', { name: 'LIVE-NEW' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Approval queue (3)' })).toBeInTheDocument();
   });
 
   it('opens another case when its row is selected', async () => {

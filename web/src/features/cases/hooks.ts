@@ -11,8 +11,18 @@ export const caseKeys = {
   counts: ['cases', 'counts'] as const,
 };
 
+/**
+ * Complaints arrive through the API at any time (the live round posts them straight to it), so the queues and their
+ * counts reload on their own. An open case doesn't: that would overwrite an officer's half-edited reply.
+ */
+export const QUEUE_REFRESH_MS = 5000;
+
 export const useCaseList = (statuses?: CaseStatus[]) =>
-  useQuery({ queryKey: caseKeys.list(statuses), queryFn: () => casesApi.listCases(statuses) });
+  useQuery({
+    queryKey: caseKeys.list(statuses),
+    queryFn: () => casesApi.listCases(statuses),
+    refetchInterval: QUEUE_REFRESH_MS,
+  });
 
 export const useOwnCases = () => useQuery({ queryKey: caseKeys.own, queryFn: casesApi.listOwnCases });
 
@@ -23,7 +33,7 @@ export const useOwnCase = (id: string) =>
   useQuery({ queryKey: [...caseKeys.detail(id), 'own'], queryFn: () => casesApi.getOwnCase(id) });
 
 export const useCounts = (enabled: boolean) =>
-  useQuery({ queryKey: caseKeys.counts, queryFn: casesApi.getCounts, enabled });
+  useQuery({ queryKey: caseKeys.counts, queryFn: casesApi.getCounts, enabled, refetchInterval: QUEUE_REFRESH_MS });
 
 /** After any action every list, count and case may have changed. */
 function useInvalidateCases() {

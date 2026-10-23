@@ -226,8 +226,10 @@ Channel: Email | Complaint: Boleh tak bagitahu cuaca esok di KL?
 
 
 def extract_llm(complaint: dict, usage: llm.Usage | None = None) -> Extraction:
-    """The LLM reads the message; code keeps two fields it measures better (see the notes in `crosscheck`):
+    """The LLM reads the message; code keeps three fields it measures better (see the notes in `crosscheck`):
     - language: detect_language() is 100% on train; the LLM called colloquial mixed text MS
+    - amount: an amount the customer never wrote is the LLM's arithmetic ("RM15.00 each", charged twice -> 30), so
+      the one RM amount in the message wins; matching on the sum loses the transaction
     - amount_approx: a hedge word before the amount ("dalam RM2200") makes it approximate even if the LLM missed it,
       otherwise matching demands the exact amount and loses the transaction
     """
@@ -238,16 +240,35 @@ def extract_llm(complaint: dict, usage: llm.Usage | None = None) -> Extraction:
     language = detect_language(complaint["text"])
     if d["language"] != language:
         notes["language"] = {"llm": d["language"], "code": language}
+    amount = d["amount"]
+    if amount is not None and not _written(complaint, amount):
+        rm = set(_rm_amounts(complaint))
+        if len(rm) == 1:                   # several amounts: no telling which one the LLM meant, keep its reading
+            amount = rm.pop()
+            notes["amount"] = {"llm": d["amount"], "code": amount}
     approx = d["amount_approx"]
-    if d["amount"] is not None and not approx and _hedged(complaint, d["amount"]):
+    if amount is not None and not approx and _hedged(complaint, amount):
         approx, notes["amount_approx"] = True, "hedge word before the amount (code)"
     return Extraction(
-        category=d["category"], language=language, amount=d["amount"], amount_approx=approx,
+        category=d["category"], language=language, amount=amount, amount_approx=approx,
         counterparty=d["counterparty"], date_phrase=d["date_phrase"], card_last4=d["card_last4"][-4:],
         fee_type=d["fee_type"], fee_month=month_of(d["fee_month_phrase"], recv),
         intent=d["intent"], confidence=d["confidence"],
         missing_info=d["missing_info"] if d["intent"] == "NEEDS_DETAILS" else [], source="llm", crosscheck=notes,
     )
+
+
+def _written(complaint: dict, amount: float) -> bool:
+    """Does this amount appear as a number anywhere in the message ("RM15.00", "15", "1,500")?"""
+    text = f"{complaint.get('subject', '')} {complaint['text']}"
+    return any(abs(float(n.replace(",", "")) - amount) < 0.005 for n in re.findall(r"\d[\d,]*(?:\.\d+)?", text))
+
+
+def _rm_amounts(complaint: dict) -> list[float]:
+    """RM amounts in the message. "RM1.5k" is skipped: read as written it is RM1.50, and the LLM's 1500 is right."""
+    text = f"{complaint.get('subject', '')} {complaint['text']}"
+    return [float(m.group(1).replace(",", "")) for m in re.finditer(r"RM\s?([\d,]+(?:\.\d{1,2})?)", text, re.I)
+            if not text[m.end():m.end() + 2].strip().lower().startswith("k")]
 
 
 def _hedged(complaint: dict, amount: float) -> bool:
