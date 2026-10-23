@@ -1,5 +1,3 @@
-import { ShieldCheck } from 'lucide-react';
-
 import { Alert, Badge, Card, Spinner, TextArea, Tile, TileGrid } from '@/components/ui';
 import { useUser } from '@/features/auth/AuthProvider';
 import { money, nice } from '@/lib/format';
@@ -12,7 +10,7 @@ import { PriorityBadge, SlaBadge, StatusBadge } from './Badges';
 import { CaseDetailsTabs } from './CaseDetailsTabs';
 import { CustomerReplyBox } from './CustomerReplyBox';
 import { FlagForReview } from './FlagForReview';
-import { ReplyActions } from './ReplyActions';
+import { ReplyActions, SelfCheckLine } from './ReplyActions';
 import styles from './CaseView.module.css';
 
 const ROUTE_LABEL: Record<string, string> = {
@@ -36,6 +34,7 @@ export function CaseBody({ caseItem, actions }: { caseItem: CaseDetail; actions:
   const canAct = actions && user.role !== 'customer' && QUEUE_STATUSES.includes(caseItem.status);
   const sent = SENT_STATUSES.includes(caseItem.status);
   const flags = caseItem.audit.filter((a) => a.action === 'flagged_for_review');
+  const rejected = caseItem.status === 'REJECTED' ? caseItem.audit.findLast((a) => a.action === 'rejected') : undefined;
 
   return (
     <article className={styles.case} aria-label={`Case ${caseItem.complaint_id}`}>
@@ -78,14 +77,14 @@ export function CaseBody({ caseItem, actions }: { caseItem: CaseDetail; actions:
         <Alert key={f.ts + f.actor} tone="warning">{`Flagged for review by ${f.actor} (${f.ts}): ${f.detail}`}</Alert>
       ))}
       {summary.key_row && <pre className={styles.keyRow}>{summary.key_row}</pre>}
-      {summary.warnings.length > 0 ? (
-        <Alert tone="error" items={summary.warnings}>The reply check found problems</Alert>
-      ) : (
-        <p className={styles.checked}>
-          <Badge tone="success" icon={ShieldCheck}>Self-check verified</Badge>
-          <span>Every transaction, amount and date in the reply belongs to this case's evidence</span>
-        </p>
+      {rejected && (
+        <Alert tone="warning">
+          {`Rejected by ${rejected.actor} (${rejected.ts}): ${rejected.detail || 'no reason given'}. Nothing from the `
+            + 'agent went out: contact the customer and handle the case yourself.'}
+        </Alert>
       )}
+      {/* With actions, ReplyActions shows the check for the text being edited; otherwise it's the agent's reply */}
+      {!canAct && <SelfCheckLine warnings={summary.warnings} />}
 
       {canAct ? (
         <ReplyActions key={caseItem.complaint_id + caseItem.updated_at} caseItem={caseItem} />

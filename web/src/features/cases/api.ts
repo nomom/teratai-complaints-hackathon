@@ -1,6 +1,6 @@
 import { apiRequest } from '@/lib/apiClient';
 
-import type { CaseDetail, CaseRow, CaseStatus, CustomerCase, IntakeComplaint } from './types';
+import type { AuditFilters, AuditLog, CaseDetail, CaseRow, CaseStatus, CustomerCase, IntakeComplaint } from './types';
 
 const EVERY = 100000;
 
@@ -17,12 +17,32 @@ export const getOwnCase = (id: string) => apiRequest<CustomerCase>(`/cases/${enc
 
 export const getCounts = () => apiRequest<Partial<Record<CaseStatus, number>>>('/cases/counts');
 
-/** replyText null sends the agent's draft as it is; an edited reply is self-checked again before it goes out. */
-export const approveCase = (id: string, replyText: string | null) =>
-  apiRequest<CaseDetail>(`/cases/${encodeURIComponent(id)}/approve`, { method: 'POST', body: { reply_text: replyText } });
+/** replyText null sends the agent's draft as it is; an edited reply is self-checked again before it goes out.
+ *  `note` is the officer's reason, stored with the action (required by the screen when the reply was edited). */
+export const approveCase = (id: string, replyText: string | null, note = '') =>
+  apiRequest<CaseDetail>(`/cases/${encodeURIComponent(id)}/approve`, {
+    method: 'POST', body: { reply_text: replyText, note },
+  });
 
-export const rejectCase = (id: string) =>
-  apiRequest<CaseDetail>(`/cases/${encodeURIComponent(id)}/reject`, { method: 'POST', body: {} });
+/** Nothing is sent; `note` is why, stored with the action. */
+export const rejectCase = (id: string, note: string) =>
+  apiRequest<CaseDetail>(`/cases/${encodeURIComponent(id)}/reject`, { method: 'POST', body: { note } });
+
+/** The fraud team's holding reply: self-checked, sent once, and the case stays in the fraud queue. */
+export const sendHoldingReply = (id: string, replyText: string | null) =>
+  apiRequest<CaseDetail>(`/cases/${encodeURIComponent(id)}/holding-reply`, {
+    method: 'POST', body: { reply_text: replyText },
+  });
+
+/** The manager's audit log across every case. */
+export const listAudit = (filters: AuditFilters) => {
+  const query = new URLSearchParams({ limit: '500' });
+  if (filters.actor) query.set('actor', filters.actor);
+  if (filters.action) query.set('action', filters.action);
+  if (filters.case?.trim()) query.set('case', filters.case.trim());
+  if (filters.peopleOnly) query.set('people_only', 'true');
+  return apiRequest<AuditLog>(`/audit?${query}`);
+};
 
 export const flagCase = (id: string, note: string) =>
   apiRequest<CaseDetail>(`/cases/${encodeURIComponent(id)}/flag`, { method: 'POST', body: { note } });

@@ -22,7 +22,7 @@ import { FILTER_STATUSES, QUEUE_STATUSES, STATUS } from '../lib/status';
 import type { CaseStatus } from '../types';
 import styles from './pages.module.css';
 
-const COLUMNS: Column[] = ['case', 'status', 'category', 'outcome', 'refund', 'priority', 'checked', 'updated'];
+const COLUMNS: Column[] = ['case', 'status', 'category', 'outcome', 'refund', 'priority', 'checked', 'handled', 'updated'];
 const FILTERS = [
   { value: 'all', label: 'All' },
   ...FILTER_STATUSES.map((s) => ({ value: s, label: STATUS[s].label })),

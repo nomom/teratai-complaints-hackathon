@@ -40,8 +40,10 @@ export function QueuePage({ config }: { config: QueueConfig }) {
       )}
       {rows.length > 0 && (
         <>
-          <p className={styles.caption}>Sorted by priority, then time left to acknowledge. Select a row to open the case.</p>
-          <QueueTable rows={rows} columns={COLUMNS} selectedId={openId} onSelect={setSelected}
+          <p className={styles.caption}>
+            {config.caption ?? 'Sorted by priority, then time left to acknowledge. Select a row to open the case.'}
+          </p>
+          <QueueTable rows={rows} columns={config.columns ?? COLUMNS} selectedId={openId} onSelect={setSelected}
             caption={`${config.title}, most urgent first`} />
           {openId && <CaseView key={openId} caseId={openId} actions={config.actions} />}
         </>

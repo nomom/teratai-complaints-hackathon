@@ -74,3 +74,11 @@
     grid-column: span 2;
   }
 }
+
+/* Audit log: the detail column wraps instead of widening the table; the full text is in the cell's title */
+.auditDetail {
+  white-space: normal !important;
+  min-width: 260px;
+  color: var(--text-2);
+  font-size: var(--text-sm);
+}
