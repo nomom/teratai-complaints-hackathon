@@ -3,7 +3,9 @@
 Off by default: with LLM_PROVIDER unset, callers use their rule-based fallbacks. To turn it on, set in your shell:
     LLM_PROVIDER=anthropic   + ANTHROPIC_API_KEY (or `ant auth login`)    model defaults to claude-opus-5-5
     LLM_PROVIDER=openai      + OPENAI_API_KEY    + LLM_MODEL=<an OpenAI model id>
-See .env.example. Both providers return the same thing, so extract.py and reply.py don't care which one runs.
+    LLM_PROVIDER=openrouter  + OPENROUTER_API_KEY + LLM_MODEL=<an OpenRouter model id, e.g. google/gemma-4-26b-a4b-it>
+    LLM_PROVIDER=deepseek    + DEEPSEEK_API_KEY  model defaults to deepseek-flash (DeepSeek-V4.1-Flash)
+See .env.example. All providers return the same thing, so extract.py and reply.py don't care which one runs.
 
 Every failure raises LLMError with a `kind` (timeout, rate_limit, refusal, bad_json, budget, ...). Callers fall back
 to rules/templates and record the kind, so failures can be counted by cause.
@@ -16,10 +18,22 @@ import threading
 from contextlib import contextmanager
 
 PROVIDER = os.environ.get("LLM_PROVIDER", "").lower()
-DEFAULT_MODEL = {"anthropic": "claude-opus-5-5"}
+DEFAULT_MODEL = {"anthropic": "claude-opus-5-5", "deepseek": "deepseek-flash"}
 MODEL = os.environ.get("LLM_MODEL") or DEFAULT_MODEL.get(PROVIDER, "")
 EFFORT = os.environ.get("LLM_EFFORT", "low")          # Anthropic: low is plenty for extraction and short replies
 OPENAI_REASONING_EFFORT = os.environ.get("OPENAI_REASONING_EFFORT", "")   # only for OpenAI reasoning models
+
+# OpenRouter: open-weight models served by several hosts each, through the OpenAI-compatible chat completions API.
+OPENROUTER_BASE_URL = os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+OPENROUTER_REASONING = os.environ.get("OPENROUTER_REASONING", "")   # "" model default | off | low | medium | high
+OPENROUTER_DATA_COLLECTION = os.environ.get("OPENROUTER_DATA_COLLECTION", "deny")   # deny: hosts that keep no data
+OPENROUTER_SORT = os.environ.get("OPENROUTER_SORT", "")             # "" OpenRouter default | price | throughput | latency
+# hosts to skip, comma-separated (e.g. "darkbloom"): some say they enforce the JSON schema and don't
+OPENROUTER_IGNORE = [h.strip() for h in os.environ.get("OPENROUTER_IGNORE", "").split(",") if h.strip()]
+
+# DeepSeek's own platform (OpenAI-compatible chat completions). Thinking is on by default there; "none" turns it off.
+DEEPSEEK_BASE_URL = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+DEEPSEEK_REASONING_EFFORT = os.environ.get("DEEPSEEK_REASONING_EFFORT", "none")   # none | low | high | max
 
 # Reliability and cost limits. The SDKs retry rate limits, 5xx and timeouts themselves (with back-off) up to
 # MAX_RETRIES; permanent errors (bad key, bad request) fail at once.
@@ -57,10 +71,11 @@ class Usage:
             raise LLMError("budget", f"{self.input_tokens + self.output_tokens} tokens already used")
 
     def add(self, u):
-        # Anthropic and OpenAI usage objects both expose input_tokens / output_tokens
+        # Anthropic and OpenAI Responses report input_tokens / output_tokens; chat completions (OpenRouter, DeepSeek) report
+        # prompt_tokens / completion_tokens
         self.calls += 1
-        self.input_tokens += getattr(u, "input_tokens", 0) or 0
-        self.output_tokens += getattr(u, "output_tokens", 0) or 0
+        self.input_tokens += getattr(u, "input_tokens", 0) or getattr(u, "prompt_tokens", 0) or 0
+        self.output_tokens += getattr(u, "output_tokens", 0) or getattr(u, "completion_tokens", 0) or 0
 
     def to_dict(self):
         return {"calls": self.calls, "input_tokens": self.input_tokens, "output_tokens": self.output_tokens,
@@ -68,7 +83,7 @@ class Usage:
 
 
 def enabled() -> bool:
-    return PROVIDER in ("anthropic", "openai") and not getattr(_thread, "off", False)
+    return PROVIDER in ("anthropic", "openai", "openrouter", "deepseek") and not getattr(_thread, "off", False)
 
 
 _thread = threading.local()
@@ -93,6 +108,20 @@ def _get_client():
                     raise LLMError("config", "LLM_PROVIDER=openai needs LLM_MODEL set to an OpenAI model id")
                 import openai
                 _client = openai.OpenAI(timeout=TIMEOUT_SECONDS, max_retries=MAX_RETRIES)   # reads OPENAI_API_KEY
+            elif PROVIDER == "openrouter":
+                if not MODEL:
+                    raise LLMError("config", "LLM_PROVIDER=openrouter needs LLM_MODEL set to an OpenRouter model id")
+                if not os.environ.get("OPENROUTER_API_KEY"):
+                    raise LLMError("config", "LLM_PROVIDER=openrouter needs OPENROUTER_API_KEY")
+                import openai
+                _client = openai.OpenAI(base_url=OPENROUTER_BASE_URL, api_key=os.environ["OPENROUTER_API_KEY"],
+                                        timeout=TIMEOUT_SECONDS, max_retries=MAX_RETRIES)
+            elif PROVIDER == "deepseek":
+                if not os.environ.get("DEEPSEEK_API_KEY"):
+                    raise LLMError("config", "LLM_PROVIDER=deepseek needs DEEPSEEK_API_KEY")
+                import openai
+                _client = openai.OpenAI(base_url=DEEPSEEK_BASE_URL, api_key=os.environ["DEEPSEEK_API_KEY"],
+                                        timeout=TIMEOUT_SECONDS, max_retries=MAX_RETRIES)
             elif PROVIDER == "anthropic":
                 import anthropic
                 # reads ANTHROPIC_API_KEY or an `ant auth login` profile
@@ -166,6 +195,74 @@ def _call_openai(system: str, user: str, usage: Usage, schema: dict | None) -> s
     return text
 
 
+def _call_openrouter(system: str, user: str, usage: Usage, schema: dict | None) -> str:
+    # Each model has several hosts; route only to ones that honour every parameter we send (so the JSON schema is
+    # enforced, not ignored) and, by default, that keep no complaint text.
+    provider = {"require_parameters": True, "data_collection": OPENROUTER_DATA_COLLECTION}
+    if OPENROUTER_SORT:
+        provider["sort"] = OPENROUTER_SORT
+    if OPENROUTER_IGNORE:
+        provider["ignore"] = OPENROUTER_IGNORE
+    extra = {"provider": provider}
+    if OPENROUTER_REASONING == "off":
+        extra["reasoning"] = {"enabled": False}
+    elif OPENROUTER_REASONING:
+        extra["reasoning"] = {"effort": OPENROUTER_REASONING, "exclude": True}   # think, but don't send it back
+    kwargs = {}
+    if schema:
+        kwargs["response_format"] = {"type": "json_schema",
+                                     "json_schema": {"name": "extraction", "schema": schema, "strict": True}}
+    resp = _get_client().chat.completions.create(
+        model=MODEL,
+        messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+        max_tokens=MAX_OUTPUT_TOKENS,
+        extra_body=extra,
+        **kwargs,
+    )
+    return _chat_text(resp, usage)
+
+
+def _call_deepseek(system: str, user: str, usage: Usage, schema: dict | None) -> str:
+    kwargs = {}
+    if schema:
+        # DeepSeek's JSON mode guarantees JSON but not our fields, so the prompt carries the schema (its docs ask for
+        # the word "json" and the expected format in the prompt); validate() still checks every reply
+        kwargs["response_format"] = {"type": "json_object"}
+        system += ("\n\nReply with one JSON object that follows this JSON schema, every property included:\n"
+                   + json.dumps(schema))
+    if DEEPSEEK_REASONING_EFFORT == "none":
+        kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
+    else:
+        kwargs["reasoning_effort"] = DEEPSEEK_REASONING_EFFORT
+        kwargs["extra_body"] = {"thinking": {"type": "enabled"}}
+    resp = _get_client().chat.completions.create(
+        model=MODEL,
+        messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+        max_tokens=MAX_OUTPUT_TOKENS,
+        **kwargs,
+    )
+    return _chat_text(resp, usage)
+
+
+def _chat_text(resp, usage: Usage) -> str:
+    """The reply text of a chat completion (OpenRouter, DeepSeek), or the LLMError kind that explains why there is none."""
+    if resp.usage:
+        usage.add(resp.usage)
+    else:
+        usage.calls += 1
+    if not resp.choices:                                   # an upstream error can come back as a reply with no choices
+        raise LLMError("empty")
+    choice = resp.choices[0]
+    if choice.finish_reason == "length":
+        raise LLMError("incomplete", "hit max_tokens")
+    if choice.finish_reason == "content_filter" or getattr(choice.message, "refusal", None):
+        raise LLMError("refusal")
+    text = choice.message.content or ""
+    if not text:
+        raise LLMError("empty")
+    return text
+
+
 def _has_refusal(resp) -> bool:
     for item in getattr(resp, "output", None) or []:
         for part in getattr(item, "content", None) or []:
@@ -180,6 +277,10 @@ def _call(system: str, user: str, usage: Usage | None, schema: dict | None = Non
     try:
         if PROVIDER == "openai":
             return _call_openai(system, user, usage, schema)
+        if PROVIDER == "openrouter":
+            return _call_openrouter(system, user, usage, schema)
+        if PROVIDER == "deepseek":
+            return _call_deepseek(system, user, usage, schema)
         return _call_anthropic(system, user, usage, schema)
     except Exception as e:  # noqa: BLE001 -- every failure leaves as an LLMError with a kind
         err = _classify(e)
@@ -217,11 +318,24 @@ def validate(obj, schema: dict, path: str = "$"):
             validate(item, schema["items"], f"{path}[{i}]")
 
 
+def _null_text_to_empty(obj, schema: dict):
+    """null in a text-only field means "not stated", the same as "": some OpenRouter hosts don't enforce the schema
+    and some models (Gemma 4) write null there. Fields that allow null, and every other check, stay as they are; a null
+    category or intent still fails validate(), because "" is not one of its values."""
+    if isinstance(obj, dict):
+        props = schema.get("properties", {})
+        return {k: "" if v is None and props.get(k, {}).get("type") == "string" else
+                _null_text_to_empty(v, props.get(k, {})) for k, v in obj.items()}
+    if isinstance(obj, list) and "items" in schema:
+        return [_null_text_to_empty(v, schema["items"]) for v in obj]
+    return obj
+
+
 def complete_json(system: str, user: str, schema: dict, usage: Usage | None = None) -> dict:
     """Structured output, parsed and validated against `schema`."""
     text = _call(system, user, usage, schema)
     try:
-        obj = json.loads(text)
+        obj = _null_text_to_empty(json.loads(text), schema)
         validate(obj, schema)
     except (json.JSONDecodeError, LLMError) as e:
         err = e if isinstance(e, LLMError) else LLMError("bad_json", str(e)[:200])

@@ -4,6 +4,7 @@
     python -m scripts.run_batch --split train --oracle-category  # A: matching + policy only, true categories
     python -m scripts.run_batch --split test --team <team-name>  # the submission
     add --store to also write the cases into the app's database
+    add --price-in 0.20 --price-out 1.20 (USD per 1M tokens, from the provider's page) to print the run's cost
 """
 import argparse
 import csv
@@ -39,6 +40,8 @@ def main():
     ap.add_argument("--out", help="predictions path (default: submissions/<team>/predictions[_train].csv)")
     ap.add_argument("--oracle-category", action="store_true", help="train only: use the true category")
     ap.add_argument("--store", action="store_true", help="also save cases to the app database")
+    ap.add_argument("--price-in", type=float, help="USD per 1M input tokens: print the run's cost")
+    ap.add_argument("--price-out", type=float, help="USD per 1M output tokens: print the run's cost")
     args = ap.parse_args()
 
     db = tools.get_db()
@@ -87,6 +90,11 @@ def main():
     print(f"wrote {out}: {len(records)}/{len(ids)} complaints in {took:.1f}s "
           f"({1000 * took / max(len(ids), 1):.0f} ms each), LLM calls {toks['calls']}, "
           f"tokens in/out {toks['input_tokens']}/{toks['output_tokens']}")
+    if args.price_in is not None and args.price_out is not None:
+        total = (toks["input_tokens"] * args.price_in + toks["output_tokens"] * args.price_out) / 1e6
+        each = total / max(len(records), 1)
+        print(f"cost: ${total:.4f} for these {len(records)}, ${each:.5f} per complaint, ${each * 750:.2f} per 750 "
+              f"(list price, no caching discount assumed)")
     flags = Counter(f for r in records for f in r.decision.flags)
     print(f"flags: {dict(flags)}  routes: {dict(Counter(r.decision.route for r in records))}")
     print(f"intents: {dict(Counter(r.extraction.intent for r in records))}  "
@@ -95,7 +103,8 @@ def main():
     xc = Counter(x.get("resolution") or x.get("result") for x in xs if x.get("result"))
     if xc:
         print(f"crosscheck (LLM vs rules on category): {dict(xc)}  code overrode the LLM on: "
-              f"language {sum('language' in x for x in xs)}, approx amount {sum('amount_approx' in x for x in xs)}")
+              f"language {sum('language' in x for x in xs)}, amount {sum('amount' in x for x in xs)}, "
+              f"approx amount {sum('amount_approx' in x for x in xs)}")
     failures = Counter(k for r in records for k in r.llm_usage.get("failures", []))
     if failures:
         print(f"LLM failures by kind (fell back to rules/templates): {dict(failures)}")

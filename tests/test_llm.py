@@ -77,6 +77,23 @@ class FakeAnthropic:
                   usage=NS(input_tokens=50, output_tokens=20))
 
 
+class FakeOpenRouter:
+    """chat.completions.create: returns `text` with `finish_reason`, or raises it if it is an exception."""
+
+    def __init__(self, text, finish_reason="stop", refusal=None, choices=True):
+        self.text, self.finish_reason, self.refusal, self.has_choices = text, finish_reason, refusal, choices
+        self.calls = []
+        self.chat = NS(completions=self)
+
+    def create(self, **kw):
+        self.calls.append(kw)
+        if isinstance(self.text, Exception):
+            raise self.text
+        choices = [NS(finish_reason=self.finish_reason, message=NS(content=self.text, refusal=self.refusal))]
+        return NS(choices=choices if self.has_choices else None,
+                  usage=NS(prompt_tokens=50, completion_tokens=20))
+
+
 class LLMTestCase(unittest.TestCase):
     """Swap in a fake provider for each test and restore the real settings afterwards."""
 
@@ -151,6 +168,101 @@ class Reliability(LLMTestCase):
         self.assertEqual(source, "llm")
         source, _ = self.source_for(FakeAnthropic("", stop_reason="refusal"), provider="anthropic")
         self.assertEqual(source, "rules (llm failed: refusal)")
+
+    def test_openrouter_success_and_request_shape(self):
+        client = FakeOpenRouter(json.dumps(extraction(category="DUPLICATE_CHARGE")))
+        source, usage = self.source_for(client, provider="openrouter")
+        self.assertEqual(source, "llm")
+        self.assertEqual((usage.calls, usage.input_tokens, usage.output_tokens), (1, 50, 20))   # chat usage names
+        kw = client.calls[0]
+        self.assertEqual([m["role"] for m in kw["messages"]], ["system", "user"])
+        fmt = kw["response_format"]
+        self.assertEqual((fmt["type"], fmt["json_schema"]["strict"]), ("json_schema", True))
+        prefs = kw["extra_body"]["provider"]
+        self.assertEqual((prefs["require_parameters"], prefs["data_collection"]), (True, "deny"))
+        self.assertNotIn("ignore", prefs)
+
+    def test_openrouter_ignore_skips_hosts(self):
+        client = self.use(FakeOpenRouter(json.dumps(extraction())), provider="openrouter")
+        saved, llm.OPENROUTER_IGNORE = llm.OPENROUTER_IGNORE, ["darkbloom"]
+        try:
+            extract.extract(self.complaint("hello"), llm.Usage())
+        finally:
+            llm.OPENROUTER_IGNORE = saved
+        self.assertEqual(client.calls[0]["extra_body"]["provider"]["ignore"], ["darkbloom"])
+
+    def test_openrouter_failure_kinds_fall_back_to_rules(self):
+        cases = {
+            "incomplete": FakeOpenRouter(json.dumps(extraction()), finish_reason="length"),
+            "refusal": FakeOpenRouter("", refusal="I can't help with that"),
+            "empty": FakeOpenRouter(None, choices=False),
+            "bad_json": FakeOpenRouter("```json\nnot json\n```"),
+            "timeout": FakeOpenRouter(APITimeoutError("read timed out")),
+        }
+        for kind, client in cases.items():
+            with self.subTest(kind=kind):
+                source, usage = self.source_for(client, provider="openrouter")
+                self.assertEqual(source, f"rules (llm failed: {kind})")
+                self.assertIn(kind, usage.failures)
+
+    def test_openrouter_reasoning_setting(self):
+        for setting, expected in (("", None), ("off", {"enabled": False}),
+                                  ("low", {"effort": "low", "exclude": True})):
+            with self.subTest(setting=setting):
+                client = self.use(FakeOpenRouter(json.dumps(extraction())), provider="openrouter")
+                saved, llm.OPENROUTER_REASONING = llm.OPENROUTER_REASONING, setting
+                try:
+                    extract.extract(self.complaint("hello"), llm.Usage())
+                finally:
+                    llm.OPENROUTER_REASONING = saved
+                self.assertEqual(client.calls[0]["extra_body"].get("reasoning"), expected)
+
+    def test_null_in_a_text_field_means_not_stated(self):
+        # Gemma 4 on OpenRouter: "card_last4": null where the schema says string
+        client = FakeOpenRouter(json.dumps(extraction(category="DUPLICATE_CHARGE", card_last4=None, fee_type=None)))
+        source, usage = self.source_for(client, provider="openrouter")
+        self.assertEqual((source, usage.failures), ("llm", []))
+        for field in ("category", "intent"):                     # "" is not one of their values: still a failure
+            with self.subTest(field=field):
+                source, _ = self.source_for(FakeOpenRouter(json.dumps(extraction(**{field: None}))), "openrouter")
+                self.assertEqual(source, "rules (llm failed: bad_json)")
+
+    def test_missing_openrouter_model_is_config_error(self):
+        source, _ = self.source_for(None, provider="openrouter", model="")
+        self.assertEqual(source, "rules (llm failed: config)")
+
+    def test_deepseek_request_shape(self):
+        client = FakeOpenRouter(json.dumps(extraction(category="DUPLICATE_CHARGE")))   # same chat completions API
+        source, usage = self.source_for(client, provider="deepseek")
+        self.assertEqual((source, usage.calls, usage.input_tokens), ("llm", 1, 50))
+        kw = client.calls[0]
+        self.assertEqual(kw["response_format"], {"type": "json_object"})      # no schema mode on DeepSeek ...
+        self.assertIn('"missing_info"', kw["messages"][0]["content"])         # ... so the prompt carries the schema
+        self.assertEqual(kw["extra_body"], {"thinking": {"type": "disabled"}})
+        self.assertNotIn("reasoning_effort", kw)
+
+    def test_deepseek_thinking_setting(self):
+        client = self.use(FakeOpenRouter(json.dumps(extraction())), provider="deepseek")
+        saved, llm.DEEPSEEK_REASONING_EFFORT = llm.DEEPSEEK_REASONING_EFFORT, "low"
+        try:
+            extract.extract(self.complaint("hello"), llm.Usage())
+        finally:
+            llm.DEEPSEEK_REASONING_EFFORT = saved
+        kw = client.calls[0]
+        self.assertEqual((kw["reasoning_effort"], kw["extra_body"]), ("low", {"thinking": {"type": "enabled"}}))
+
+    def test_deepseek_failure_falls_back_to_rules(self):
+        source, usage = self.source_for(FakeOpenRouter('{"category": "DUPLICATE_CHARGE"}'), provider="deepseek")
+        self.assertEqual(source, "rules (llm failed: bad_json)")              # valid JSON, fields missing
+
+    def test_missing_deepseek_key_is_config_error(self):
+        saved = os.environ.pop("DEEPSEEK_API_KEY", None)
+        try:
+            source, _ = self.source_for(None, provider="deepseek", model="deepseek-flash")
+        finally:
+            if saved is not None:
+                os.environ["DEEPSEEK_API_KEY"] = saved
+        self.assertEqual(source, "rules (llm failed: config)")
 
     def test_pipeline_survives_llm_outage(self):
         self.use(FakeOpenAI(APITimeoutError("down"), reply=APITimeoutError("down")))
@@ -279,6 +391,30 @@ class Intents(LLMTestCase):
         self.assertTrue(ex.amount_approx)
         self.assertIn("amount_approx", ex.crosscheck)
         self.assertEqual(ex.crosscheck["result"], "agree")             # category check still recorded alongside
+
+    def test_code_owns_an_amount_the_customer_never_wrote(self):
+        # CMP-00350 with Qwen3.6: "RM15.00 each", charged twice -> the LLM sometimes added them up to 30
+        each = ("Card saya kena charge 2 kali at Kedai Runcit Bahagia Sungai Petani pada 21/09/2026, RM15.00 each. "
+                "Beli sekali je. Pls check asap.")
+        cases = [
+            (each, 30.0, 15.0),                                                    # the LLM's sum: code wins
+            (each, 15.0, 15.0),                                                    # as written: no override
+            ("transfer 1.5k to my landlord semalam failed", 1500.0, 1500.0),       # nothing in RM to fall back on
+            ("transfer RM1.5k to my landlord semalam failed", 1500.0, 1500.0),     # "RM1.5k" is not RM1.50
+            ("charged RM15 and RM20 at GoRide, I only rode once", 35.0, 35.0),     # which one? keep the LLM's
+        ]
+        for text, said, expected in cases:
+            with self.subTest(text=text, said=said):
+                self.use(FakeOpenAI(extraction(category="DUPLICATE_CHARGE", amount=said)))
+                ex = extract.extract(self.complaint(text), llm.Usage())
+                self.assertEqual(ex.amount, expected)
+                self.assertEqual("amount" in ex.crosscheck, said != expected)
+
+        self.use(FakeOpenAI(extraction(category="DUPLICATE_CHARGE", language="MIXED", amount=30.0,
+                                       counterparty="Kedai Runcit Bahagia Sungai Petani", date_phrase="21/09/2026")))
+        rec = process_complaint(tools.get_db().complaints["CMP-00350"])
+        self.assertEqual((rec.decision.matched_txn_id, rec.decision.outcome, rec.decision.refund_amount_myr),
+                         ("TXN-0144566", "REFUND", 15.0))
 
     def test_follow_ups_used_up_goes_to_officer(self):
         self.use(FakeOpenAI(extraction(intent="NEEDS_DETAILS", missing_info=["what_happened"])))
