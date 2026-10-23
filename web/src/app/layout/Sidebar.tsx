@@ -1,22 +1,17 @@
 import { clsx } from 'clsx';
-import { LogOut } from 'lucide-react';
-import { NavLink, useNavigate } from 'react-router';
+import { NavLink } from 'react-router';
 
-import { Badge, Button } from '@/components/ui';
-import { useUser, useAuth } from '@/features/auth/AuthProvider';
-import { ROLE_LABEL } from '@/features/auth/types';
+import { useUser } from '@/features/auth/AuthProvider';
 import { StatusBadge } from '@/features/cases/components/Badges';
 import { useCounts } from '@/features/cases/hooks';
 import { FILTER_STATUSES } from '@/features/cases/lib/status';
 
 import { pagesFor, SECTIONS } from '../navigation';
-import { ThemeSwitch } from '../providers/ThemeSwitch';
+import { AccountMenu } from './AccountMenu';
 import styles from './Sidebar.module.css';
 
 export function Sidebar() {
   const user = useUser();
-  const { signOut } = useAuth();
-  const navigate = useNavigate();
   const pages = pagesFor(user.role);
   const staff = user.role !== 'customer';
   const counts = useCounts(staff).data ?? {};
@@ -47,12 +42,6 @@ export function Sidebar() {
         ))}
       </nav>
 
-      <div className={styles.profile}>
-        <p className={styles.name}>{user.full_name}</p>
-        <Badge tone="accent">{ROLE_LABEL[user.role]}</Badge>
-        <p className={styles.sub}>Signed in as {user.username}</p>
-      </div>
-
       {staff && shown.length > 0 && (
         <div className={styles.counts}>
           <p className={styles.sectionTitle}>Cases you can see</p>
@@ -67,14 +56,8 @@ export function Sidebar() {
         </div>
       )}
 
-      <Button icon={LogOut} block onClick={() => {
-        signOut();
-        navigate('/sign-in', { replace: true });
-      }}>
-        Log out
-      </Button>
-      <div className={styles.theme}>
-        <ThemeSwitch />
+      <div className={styles.account}>
+        <AccountMenu />
       </div>
     </aside>
   );

@@ -32,6 +32,31 @@ export function parseStamp(stamp: string | null | undefined): Date | null {
   return new Date(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi), Number(s ?? 0));
 }
 
+// Spelled out rather than Intl: browsers disagree on short months ("Sep" or "Sept")
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October',
+  'November', 'December'];
+
+/** "2002-02-07" or "2026-09-22 18:49:54" -> 7 Feb 2002 / 22 Sep 2026; "-" when there is no date. */
+export function day(stamp: string | null | undefined): string {
+  const match = stamp ? /^(\d{4})-(\d{2})-(\d{2})/.exec(stamp) : null;
+  if (!match) return '-';
+  const [, y, m, d] = match;
+  return `${Number(d)} ${MONTHS[Number(m) - 1].slice(0, 3)} ${y}`;
+}
+
+/** "2026-09-22 18:49:54" -> September 2026. */
+export function monthOf(stamp: string): string {
+  const [y, m] = stamp.split('-');
+  return `${MONTHS[Number(m) - 1]} ${y}`;
+}
+
+/** Chan Zhi Hao -> CH, Nur Farah binti Rahman -> NR: first and last capitalised words (skips bin, a/l, ...). */
+export function initials(name: string): string {
+  const words = name.split(/\s+/).filter((w) => /^[A-Z]/.test(w));
+  if (!words.length) return name.trim().charAt(0).toUpperCase();
+  return (words[0][0] + (words.length > 1 ? words[words.length - 1][0] : '')).toUpperCase();
+}
+
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }

@@ -48,7 +48,7 @@ textarea {
 
 pre,
 code {
-  font-family: ui-monospace, 'Cascadia Code', 'SF Mono', Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: var(--text-sm);
 }
 

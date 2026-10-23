@@ -5,15 +5,20 @@ import {
   Inbox,
   ListChecks,
   MessagesSquare,
+  ReceiptText,
   Shield,
   SquarePen,
+  UserRound,
   type LucideIcon,
 } from 'lucide-react';
 
 import type { Role } from '@/features/auth/types';
 
-export type PageKey = 'approval' | 'fraud' | 'awaiting' | 'resolved' | 'cases' | 'intake' | 'myCases' | 'newComplaint';
-export type Section = 'Queues' | 'Records' | 'Intake' | 'My bank';
+export type PageKey =
+  | 'approval' | 'fraud' | 'awaiting' | 'resolved' | 'cases' | 'intake' | 'myCases' | 'newComplaint'
+  | 'profile' | 'transactions';
+/** 'Account' pages open from the account menu at the bottom of the sidebar, not from the page list. */
+export type Section = 'Queues' | 'Records' | 'Intake' | 'My bank' | 'Account';
 
 export interface PageDef {
   key: PageKey;
@@ -32,6 +37,8 @@ export const PAGE_DEFS: Record<PageKey, PageDef> = {
   intake: { key: 'intake', title: 'Submit complaint', path: '/intake', icon: Inbox, section: 'Intake' },
   myCases: { key: 'myCases', title: 'My cases', path: '/my-cases', icon: MessagesSquare, section: 'My bank' },
   newComplaint: { key: 'newComplaint', title: 'New complaint', path: '/new-complaint', icon: SquarePen, section: 'My bank' },
+  profile: { key: 'profile', title: 'Profile', path: '/profile', icon: UserRound, section: 'Account' },
+  transactions: { key: 'transactions', title: 'Transactions', path: '/transactions', icon: ReceiptText, section: 'Account' },
 };
 
 /** Each role sees exactly these pages; the first is where it lands after signing in. */
@@ -39,9 +46,10 @@ export const PAGES_BY_ROLE: Record<Role, PageKey[]> = {
   officer: ['approval', 'cases', 'intake'],
   fraud: ['fraud', 'cases', 'intake'],
   manager: ['approval', 'fraud', 'awaiting', 'resolved', 'cases', 'intake'],
-  customer: ['myCases', 'newComplaint'],
+  customer: ['myCases', 'newComplaint', 'profile', 'transactions'],
 };
 
+/** The sections of the sidebar's page list, in order ('Account' is left out: see AccountMenu). */
 export const SECTIONS: Section[] = ['Queues', 'Records', 'Intake', 'My bank'];
 
 export const pagesFor = (role: Role): PageDef[] => PAGES_BY_ROLE[role].map((key) => PAGE_DEFS[key]);

@@ -8,10 +8,6 @@
   margin-bottom: var(--space-4);
 }
 
-.filter {
-  max-width: 360px;
-}
-
 .formCard {
   max-width: 820px;
   margin-bottom: var(--space-5);
@@ -22,8 +18,59 @@
   gap: 0 var(--space-4);
 }
 
+/* All cases: search and filters. One column on a phone, two from 720px, one search row plus one filter row from 1200px */
+.filterPanel {
+  padding: var(--space-4) var(--space-4) var(--space-2);
+  margin-bottom: var(--space-4);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--card-shadow);
+}
+
+.filters {
+  display: grid;
+  gap: 0 var(--space-4);
+}
+
+.filterFooter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: 42px;
+}
+
+.filterFooter .caption {
+  margin-bottom: 0;
+}
+
 @media (min-width: 720px) {
   .twoCols {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .searchCell {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (min-width: 1200px) {
+  .filters {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .searchCell {
+    grid-column: span 4;
+  }
+
+  .statusCell,
+  .categoryCell {
+    grid-column: span 2;
   }
 }

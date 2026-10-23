@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { Send } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
+import { useLocation } from 'react-router';
 
 import { Alert, Button, Card, PageHeader, Spinner, TextArea, TextField } from '@/components/ui';
 import { CustomerStatusBadge } from '@/features/cases/components/Badges';
@@ -8,9 +9,19 @@ import * as casesApi from '@/features/cases/api';
 import { caseKeys } from '@/features/cases/hooks';
 import { waitForWorker } from '@/features/cases/lib/waitForWorker';
 import type { CustomerCase } from '@/features/cases/types';
+import { day, money } from '@/lib/format';
 
 import { Thread } from '../components/Thread';
 import styles from '../components/customer.module.css';
+import type { Transaction } from '../types';
+
+/** "Report" on the Transactions page opens this page with the transaction, so the facts are already written. */
+function prefill(txn: Transaction | undefined) {
+  if (!txn) return { subject: '', text: '' };
+  const who = txn.channel === 'Fee' && txn.description ? txn.description : txn.merchant_or_counterparty;
+  const facts = `${txn.channel} ${txn.txn_id}: ${money(txn.amount_myr)}, ${who}, on ${day(txn.txn_time)}.`;
+  return { subject: `${who}, ${money(txn.amount_myr)} on ${day(txn.txn_time)}`, text: `${facts}\n\n` };
+}
 
 type Step =
   | { kind: 'idle' }
@@ -22,8 +33,9 @@ type Step =
 /** Filed under the customer's own ID, from the app; dated 30 Sep 2026, the last day of the bank's data (API side). */
 export function NewComplaintPage() {
   const queryClient = useQueryClient();
-  const [subject, setSubject] = useState('');
-  const [text, setText] = useState('');
+  const reported = (useLocation().state as { txn?: Transaction } | null)?.txn;
+  const [subject, setSubject] = useState(() => prefill(reported).subject);
+  const [text, setText] = useState(() => prefill(reported).text);
   const [step, setStep] = useState<Step>({ kind: 'idle' });
 
   async function submit(event: FormEvent) {

@@ -7,7 +7,15 @@ import { QUEUES } from '@/features/cases/lib/queues';
 
 import { RequireAuth, RequirePage, RoleHome } from './guards';
 import { AppShell } from './layout/AppShell';
-import { AllCasesPage, MyCasesPage, NewComplaintPage, QueuePage, SubmitComplaintPage } from './lazyPages';
+import {
+  AllCasesPage,
+  MyCasesPage,
+  NewComplaintPage,
+  ProfilePage,
+  QueuePage,
+  SubmitComplaintPage,
+  TransactionsPage,
+} from './lazyPages';
 import { PAGE_DEFS, type PageKey } from './navigation';
 
 const page = (key: PageKey, element: ReactNode): RouteObject => ({
@@ -39,6 +47,8 @@ export const routes: RouteObject[] = [
       page('intake', <SubmitComplaintPage />),
       page('myCases', <MyCasesPage />),
       page('newComplaint', <NewComplaintPage />),
+      page('profile', <ProfilePage />),
+      page('transactions', <TransactionsPage />),
       { path: '*', element: <RoleHome /> },
     ],
   },

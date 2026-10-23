@@ -14,7 +14,8 @@ describe('theme', () => {
     await user.click(screen.getAllByRole('switch', { name: 'Dark mode' })[0]);
     expect(document.documentElement.dataset.theme).toBe('light');
 
-    await user.click(screen.getByRole('button', { name: 'Log out' }));
+    await user.click(screen.getByRole('button', { name: /account menu/ }));
+    await user.click(await screen.findByRole('button', { name: 'Log out' }));
     expect(await screen.findByRole('heading', { name: 'Complaints Ops' })).toBeInTheDocument();
     expect(document.documentElement.dataset.theme).toBe('light');
     expect(screen.getByRole('switch', { name: 'Dark mode' })).not.toBeChecked();

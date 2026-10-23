@@ -1,4 +1,5 @@
 export { Alert, type AlertTone } from './Alert';
+export { Avatar } from './Avatar';
 export { Badge, type Tone } from './Badge';
 export { Button, type ButtonVariant } from './Button';
 export { Card, Tile, TileGrid } from './Card';

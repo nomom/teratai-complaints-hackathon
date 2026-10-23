@@ -75,26 +75,6 @@
   color: var(--primary-ink);
 }
 
-.profile {
-  display: grid;
-  justify-items: start;
-  gap: var(--space-2);
-  padding: var(--space-4);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-}
-
-.name {
-  font-weight: 600;
-  font-size: var(--text-lg);
-}
-
-.sub {
-  color: var(--text-2);
-  font-size: var(--text-sm);
-}
-
 .counts li {
   display: flex;
   align-items: center;
@@ -108,9 +88,9 @@
   font-weight: 600;
 }
 
-.theme {
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--border);
+/* Pinned to the bottom of the full-height sidebar on wide screens; simply last in the stack on a phone */
+.account {
+  margin-top: auto;
 }
 
 @media (min-width: 960px) {
