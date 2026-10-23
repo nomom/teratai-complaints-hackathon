@@ -4,6 +4,7 @@ import {
   FolderOpen,
   Hourglass,
   Inbox,
+  LayoutDashboard,
   ListChecks,
   MessagesSquare,
   ReceiptText,
@@ -17,10 +18,10 @@ import {
 import type { Role } from '@/features/auth/types';
 
 export type PageKey =
-  | 'approval' | 'fraud' | 'awaiting' | 'rejected' | 'resolved' | 'cases' | 'audit' | 'intake' | 'myCases'
-  | 'newComplaint' | 'profile' | 'transactions';
+  | 'approval' | 'fraud' | 'awaiting' | 'rejected' | 'resolved' | 'cases' | 'audit' | 'dashboard' | 'intake'
+  | 'myCases' | 'newComplaint' | 'profile' | 'transactions';
 /** 'Account' pages open from the account menu at the bottom of the sidebar, not from the page list. */
-export type Section = 'Queues' | 'Records' | 'Intake' | 'My bank' | 'Account';
+export type Section = 'Queues' | 'Records' | 'Insights' | 'Intake' | 'My bank' | 'Account';
 
 export interface PageDef {
   key: PageKey;
@@ -38,6 +39,7 @@ export const PAGE_DEFS: Record<PageKey, PageDef> = {
   resolved: { key: 'resolved', title: 'Resolved automatically', path: '/resolved', icon: CheckCheck, section: 'Records' },
   cases: { key: 'cases', title: 'All cases', path: '/cases', icon: FolderOpen, section: 'Records' },
   audit: { key: 'audit', title: 'Audit log', path: '/audit', icon: ScrollText, section: 'Records' },
+  dashboard: { key: 'dashboard', title: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, section: 'Insights' },
   intake: { key: 'intake', title: 'Submit complaint', path: '/intake', icon: Inbox, section: 'Intake' },
   myCases: { key: 'myCases', title: 'My cases', path: '/my-cases', icon: MessagesSquare, section: 'My bank' },
   newComplaint: { key: 'newComplaint', title: 'New complaint', path: '/new-complaint', icon: SquarePen, section: 'My bank' },
@@ -47,14 +49,14 @@ export const PAGE_DEFS: Record<PageKey, PageDef> = {
 
 /** Each role sees exactly these pages; the first is where it lands after signing in. */
 export const PAGES_BY_ROLE: Record<Role, PageKey[]> = {
-  officer: ['approval', 'rejected', 'cases', 'intake'],
-  fraud: ['fraud', 'rejected', 'cases', 'intake'],
-  manager: ['approval', 'fraud', 'awaiting', 'rejected', 'resolved', 'cases', 'audit', 'intake'],
+  officer: ['approval', 'rejected', 'cases', 'dashboard', 'intake'],
+  fraud: ['fraud', 'rejected', 'cases', 'dashboard', 'intake'],
+  manager: ['approval', 'fraud', 'awaiting', 'rejected', 'resolved', 'cases', 'audit', 'dashboard', 'intake'],
   customer: ['myCases', 'newComplaint', 'profile', 'transactions'],
 };
 
 /** The sections of the sidebar's page list, in order ('Account' is left out: see AccountMenu). */
-export const SECTIONS: Section[] = ['Queues', 'Records', 'Intake', 'My bank'];
+export const SECTIONS: Section[] = ['Queues', 'Records', 'Insights', 'Intake', 'My bank'];
 
 export const pagesFor = (role: Role): PageDef[] => PAGES_BY_ROLE[role].map((key) => PAGE_DEFS[key]);
 export const homePath = (role: Role): string => PAGE_DEFS[PAGES_BY_ROLE[role][0]].path;
