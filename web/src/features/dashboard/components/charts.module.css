@@ -1,0 +1,821 @@
+/* Dashboard charts, drawn with plain elements, SVG and the theme's tokens: thin marks, a 2px surface gap between
+   touching parts, rounded data ends, hairline gridlines. Text always wears text tokens; only the marks carry colour. */
+
+.figure {
+  margin: 0;
+}
+
+.muted {
+  color: var(--text-2);
+  font-size: var(--text-sm);
+}
+
+.empty {
+  color: var(--text-2);
+  padding: var(--space-4) 0;
+}
+
+.number {
+  text-align: right;
+}
+
+/* Every card on the board: the app's surface, hairline border and card radius */
+.scorecard,
+.gaugeCard,
+.donutCard,
+.panel {
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--card-shadow);
+  padding: var(--space-4);
+}
+
+.cardLabel {
+  color: var(--text-2);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.panelTitle {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: var(--space-1);
+}
+
+.panelNote {
+  color: var(--text-2);
+  font-size: var(--text-sm);
+  margin-bottom: var(--space-4);
+}
+
+/* Scorecard: label, the figure, a note, the daily trend, the change against the period before */
+.scorecard {
+  display: flex;
+  flex-direction: column;
+}
+
+.scoreValue {
+  font-size: var(--text-display);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  margin-top: var(--space-1);
+  overflow-wrap: anywhere;
+}
+
+.scoreNote {
+  color: var(--text-2);
+  font-size: var(--text-xs);
+  margin-top: var(--space-1);
+}
+
+.sparkline {
+  display: block;
+  width: 100%;
+  height: 52px;
+  margin-top: var(--space-4);
+  overflow: visible;
+  cursor: crosshair;
+}
+
+.sparkLine {
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.sparkArea {
+  fill: var(--primary);
+  opacity: 0.1;
+}
+
+.sparkBar {
+  fill: var(--primary);
+}
+
+.sparkBarActive {
+  fill: var(--primary-ink);
+}
+
+.sparkCursor {
+  stroke: var(--text-3);
+  stroke-width: 1;
+}
+
+.sparkReadout {
+  min-height: 1.5em;
+  margin-top: var(--space-1);
+  color: var(--text-3);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.change {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  margin-top: auto;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+  font-size: var(--text-xs);
+}
+
+.changeBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.changeBadge svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.good svg {
+  color: var(--success-ink);
+}
+
+.bad svg {
+  color: var(--error-ink);
+}
+
+.neutral svg {
+  color: var(--text-2);
+}
+
+.changeContext {
+  color: var(--text-2);
+}
+
+/* Gauge: a half ring against its target */
+.gaugeCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.gaugeCard .cardLabel {
+  align-self: flex-start;
+}
+
+.gauge {
+  position: relative;
+  width: 100%;
+  max-width: 220px;
+  margin-top: var(--space-3);
+}
+
+.gauge svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.gaugeTrack,
+.gaugeFill {
+  fill: none;
+  stroke-width: 16;
+}
+
+.gaugeTrack {
+  stroke: var(--border);
+}
+
+.gaugeFill {
+  stroke-linecap: round;
+}
+
+.gaugeTick {
+  stroke: var(--text-2);
+  stroke-width: 2;
+}
+
+.gaugeNeedle {
+  stroke: var(--text);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.gaugeHub {
+  fill: var(--text);
+}
+
+/* 0% and 100% sit under the two ends of the arc (at 10% and 90% of the width) */
+.gauge {
+  padding-bottom: var(--space-4);
+}
+
+.gaugeMin,
+.gaugeMax {
+  position: absolute;
+  bottom: 0;
+  color: var(--text-3);
+  font-size: var(--text-xs);
+  transform: translateX(-50%);
+}
+
+.gaugeMin {
+  left: 10%;
+}
+
+.gaugeMax {
+  left: 90%;
+}
+
+.gaugeValue {
+  font-size: var(--text-display);
+  font-weight: 600;
+  line-height: 1.15;
+  margin-top: var(--space-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.gaugeBand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.gaugeBand svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+/* Donut: the ring with its total in the middle, and a legend that is also the filter */
+.donutBody {
+  display: grid;
+  gap: var(--space-4);
+  align-items: center;
+  margin-top: var(--space-3);
+}
+
+.donut {
+  position: relative;
+  width: 140px;
+  height: 140px;
+  margin: 0 auto;
+}
+
+.donut svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform: rotate(0deg);
+}
+
+.donutTrack,
+.donutSlice {
+  fill: none;
+  stroke-width: 5;
+}
+
+.donutTrack {
+  stroke: var(--neutral-tint);
+}
+
+.donutSlice[data-dim] {
+  opacity: 0.25;
+}
+
+.donutCenter {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.1;
+  pointer-events: none;
+}
+
+.donutCenter strong {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.donutCenter span {
+  color: var(--text-2);
+  font-size: var(--text-xs);
+}
+
+.donutLegend,
+.legend {
+  list-style: none;
+  padding: 0;
+}
+
+.donutLegend {
+  display: grid;
+  gap: 2px;
+}
+
+.legendRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto 3.5em;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.legendRow:hover {
+  background: var(--neutral-tint);
+}
+
+.legendRow:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.legendRow:active {
+  background: var(--primary-tint);
+}
+
+.legendRow[aria-pressed='true'] {
+  background: var(--primary-tint);
+  border-color: var(--primary-border);
+}
+
+.legendName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.legendNumber {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.legendShare {
+  color: var(--text-2);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex: none;
+}
+
+/* Legend above a chart: a rect swatch per group (it mirrors the bars), the label, then its total */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin-bottom: var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--text-2);
+}
+
+.legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.legendCount {
+  color: var(--text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Ranked table: name (a filter button), cases, an optional figure, and the share as a bar */
+.ranked {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: var(--space-3);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.ranked th,
+.ranked td {
+  padding: var(--space-1) var(--space-2);
+  text-align: left;
+  white-space: nowrap;
+}
+
+/* The page never scrolls sideways: on the narrowest screens the table scrolls inside its card instead */
+.rankedFrame {
+  overflow-x: auto;
+}
+
+.ranked thead th {
+  white-space: normal;
+  vertical-align: bottom;
+  color: var(--text-2);
+  font-weight: 500;
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.ranked tbody tr:first-child > * {
+  padding-top: var(--space-2);
+}
+
+.ranked .number {
+  text-align: right;
+}
+
+.ranked tbody th {
+  font-weight: 400;
+  width: 40%;
+  max-width: 0;
+}
+
+.ranked tr[data-selected] > * {
+  background: var(--primary-tint);
+}
+
+.nameButton {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 2px var(--space-1);
+  margin-left: calc(var(--space-1) * -1);
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.nameButton:hover {
+  color: var(--link);
+  text-decoration: underline;
+}
+
+.nameButton:focus-visible {
+  outline: 2px solid var(--primary);
+}
+
+.nameButton[aria-pressed='true'] {
+  color: var(--primary-ink);
+  font-weight: 600;
+}
+
+/* On the narrowest phones the share is a number only; the bar joins it from 400px */
+.barCol {
+  width: auto;
+}
+
+.barCol .track {
+  display: none;
+}
+
+.shareBar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.shareText {
+  width: 3em;
+  color: var(--text-2);
+  text-align: right;
+}
+
+.track {
+  display: block;
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--neutral-tint);
+  overflow: hidden;
+}
+
+.fill {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  border-radius: 4px;
+  background: var(--primary);
+}
+
+/* Outcomes by category: one 100% bar per category */
+.stackRows {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.stackRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-1) var(--space-3);
+  align-items: center;
+  font-size: var(--text-sm);
+}
+
+.stackName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stackBar {
+  grid-row: 2;
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 2px;
+  height: 14px;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.stackPart {
+  flex-basis: 0;
+  min-width: 2px;
+}
+
+.stackTotal {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Volume chart: y labels on the left, the plot, x labels under the plot */
+.chart {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  grid-template-rows: 200px auto;
+}
+
+.yAxis {
+  position: relative;
+  color: var(--text-3);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.yAxis span {
+  position: absolute;
+  right: var(--space-2);
+  transform: translateY(50%);
+  line-height: 1;
+}
+
+.plot {
+  position: relative;
+  border-radius: var(--radius);
+}
+
+.plot:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 4px;
+}
+
+.gridline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--border);
+}
+
+.columns {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  align-items: end;
+}
+
+.slot {
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0 1px;
+  border-radius: 4px 4px 0 0;
+}
+
+.slotActive {
+  background: var(--neutral-tint);
+}
+
+.stack {
+  width: 100%;
+  max-width: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+  border-radius: 4px 4px 0 0;
+}
+
+.segment {
+  flex-basis: 0;
+  min-height: 2px;
+}
+
+.xAxis {
+  grid-column: 2;
+  display: grid;
+  padding-top: var(--space-2);
+  color: var(--text-3);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.tooltip {
+  position: absolute;
+  top: 0;
+  z-index: 2;
+  min-width: 180px;
+  padding: var(--space-2) var(--space-3);
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--elevated-shadow);
+  pointer-events: none;
+  font-size: var(--text-sm);
+}
+
+.tooltip[data-side='right'] {
+  transform: translateX(12px);
+}
+
+.tooltip[data-side='left'] {
+  transform: translateX(calc(-100% - 12px));
+}
+
+.tooltipTitle {
+  color: var(--text-2);
+  margin-bottom: var(--space-1);
+}
+
+.tooltipRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.tooltipRow strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.lineKey {
+  width: 12px;
+  height: 2px;
+  border-radius: 1px;
+  flex: none;
+}
+
+.readout {
+  min-height: 1.5em;
+  margin-top: var(--space-3);
+  color: var(--text-2);
+  font-size: var(--text-sm);
+}
+
+.tableToggle {
+  margin-top: var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.tableToggle summary {
+  cursor: pointer;
+  color: var(--link);
+  width: fit-content;
+  border-radius: var(--radius);
+}
+
+.tableToggle summary:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.tableToggle[open] summary {
+  margin-bottom: var(--space-2);
+}
+
+/* Tables: a chart's data, and actions by person */
+.tableFrame {
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.table th,
+.table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--elevated);
+  color: var(--text-2);
+  font-weight: 500;
+}
+
+.table tbody th {
+  font-weight: 500;
+}
+
+.table tbody tr:last-child > * {
+  border-bottom: 0;
+}
+
+.table .number {
+  text-align: right;
+}
+
+.username {
+  display: block;
+  color: var(--text-3);
+  font-size: var(--text-xs);
+  font-weight: 400;
+}
+
+.meterCell {
+  width: 30%;
+  min-width: 80px;
+}
+
+.people {
+  min-width: 0;
+}
+
+.people > .muted {
+  margin-bottom: var(--space-3);
+}
+
+@media (min-width: 400px) {
+  .scorecard,
+  .gaugeCard,
+  .donutCard,
+  .panel {
+    padding: var(--space-4) var(--space-5);
+  }
+
+  .barCol {
+    width: 32%;
+  }
+
+  .barCol .track {
+    display: block;
+  }
+
+  .donutBody {
+    grid-template-columns: 120px minmax(0, 1fr);
+  }
+
+  .donut {
+    width: 120px;
+    height: 120px;
+  }
+}
+
+@media (min-width: 560px) {
+  .donutBody {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 720px) {
+  .chart {
+    grid-template-columns: 44px minmax(0, 1fr);
+    grid-template-rows: 240px auto;
+  }
+}

@@ -10,6 +10,7 @@ import { AppShell } from './layout/AppShell';
 import {
   AllCasesPage,
   AuditLogPage,
+  DashboardPage,
   MyCasesPage,
   NewComplaintPage,
   ProfilePage,
@@ -47,6 +48,7 @@ export const routes: RouteObject[] = [
       page('resolved', <QueuePage key="resolved" config={QUEUES.resolved} />),
       page('cases', <AllCasesPage />),
       page('audit', <AuditLogPage />),
+      page('dashboard', <DashboardPage />),
       page('intake', <SubmitComplaintPage />),
       page('myCases', <MyCasesPage />),
       page('newComplaint', <NewComplaintPage />),

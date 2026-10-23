@@ -16,7 +16,7 @@ The React app in web/ is the client: it calls the same GET /cases/{id} and POST 
 staff view (full record and summary) instead of the contract view. A signed-in customer files with POST /me/complaints,
 and reads their own details and transactions with GET /me/profile and GET /me/transactions (app/customer_data.py).
 The fraud team acknowledges a case with POST /cases/{id}/holding-reply (the case stays with them), and a manager reads
-the audit log across every case with GET /audit.
+the audit log across every case with GET /audit. Staff see charts of their own cases with GET /dashboard.
 """
 import datetime as dt
 import functools
@@ -32,7 +32,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from agent.summary import case_summary
-from app import contract, customer_data, store
+from app import contract, customer_data, dashboard, store
 from app.UserAccessControl import roles
 from app.UserAccessControl import accounts
 from app.UserAccessControl.accounts import Account
@@ -340,3 +340,21 @@ def flag(complaint_id: str, body: FlagIn, user: Account = Depends(require_roles(
 @app.get("/stats")
 def stats(user: Account = Depends(require_roles(roles.MANAGER))):
     return store.counts()
+
+
+@app.get("/dashboard")
+def dashboard_view(date_from: Optional[str] = None, date_to: Optional[str] = None, last_days: Optional[int] = None,
+                   status: Optional[str] = None, route: Optional[str] = None, category: Optional[str] = None,
+                   outcome: Optional[str] = None, priority: Optional[str] = None, channel: Optional[str] = None,
+                   language: Optional[str] = None, user: Account = Depends(require_roles(*roles.STAFF_ROLES))):
+    """The dashboard's numbers (app/dashboard.py), only over the cases the signed-in role may see. Dates are
+    YYYY-MM-DD on received_at, both ends included, or `last_days` up to the newest complaint the role can see; every
+    other filter takes one value or several, comma-separated (NONE: the column is empty). Who approved or rejected
+    what is for the manager only."""
+    filters = dashboard.parse_filters({"status": status, "route": route, "category": category, "outcome": outcome,
+                                       "priority": priority, "channel": channel, "language": language})
+    try:
+        return dashboard.summary(filters, date_from, date_to, roles.case_filter(user), people=user.role == roles.MANAGER,
+                                 last_days=last_days)
+    except ValueError as e:
+        raise HTTPException(422, str(e))

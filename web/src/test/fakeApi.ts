@@ -81,10 +81,95 @@ export const STATEMENT: Statement = {
   ],
 };
 
+const DASHBOARD_COLUMNS: Record<string, keyof CaseDetail> = {
+  status: 'status', route: 'route', category: 'category', outcome: 'outcome', priority: 'priority',
+  channel: 'channel', language: 'reply_language',
+};
+
+/** GET /dashboard over the cases the viewer may see (app/dashboard.py, simplified): the column filters (one value or
+ *  several, NONE for empty), date_from / date_to or last_days, and the same figures for the period before. */
+function dashboardOf(seen: CaseDetail[], q: URLSearchParams, people: boolean) {
+  const valueOf = (c: CaseDetail, name: string) => String(c[DASHBOARD_COLUMNS[name]] ?? '') || 'NONE';
+  const days = seen.map((c) => c.received_at.slice(0, 10)).sort();
+  const last = days[days.length - 1] ?? null;
+  const shift = (day: string, n: number) => {
+    const d = new Date(`${day}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+  };
+  const lastDays = Number(q.get('last_days'));
+  const from = lastDays && last ? shift(last, 1 - lastDays) : q.get('date_from');
+  const to = lastDays && last ? last : q.get('date_to');
+  const matching = (start: string | null, end: string | null) => seen.filter((c) => Object.keys(DASHBOARD_COLUMNS)
+    .every((name) => !q.get(name) || q.get(name)!.split(',').includes(valueOf(c, name)))
+    && (!start || c.received_at.slice(0, 10) >= start) && (!end || c.received_at.slice(0, 10) <= end));
+  const rows = matching(from, to);
+  const countBy = (list: CaseDetail[], name: string) => {
+    const out: Record<string, number> = {};
+    list.forEach((c) => (out[valueOf(c, name)] = (out[valueOf(c, name)] ?? 0) + 1));
+    return Object.fromEntries(Object.entries(out).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])));
+  };
+  const byDay: Record<string, number> = {};
+  rows.forEach((c) => {
+    const key = `${c.received_at.slice(0, 10)}|${c.status}`;
+    byDay[key] = (byDay[key] ?? 0) + 1;
+  });
+  const sum = (list: CaseDetail[]) => list.reduce((total, c) => total + (c.refund_amount_myr ?? 0), 0);
+  const tally: Record<string, Record<string, number | string>> = {};
+  rows.forEach((c) => c.audit.forEach((a) => {
+    const kind = a.action === 'holding_reply_sent' ? 'holding_reply'
+      : a.action === 'human_action' ? (JSON.parse(a.detail) as { action: string }).action : null;
+    if (!kind) return;
+    tally[a.actor] ??= { actor: a.actor, name: STAFF[a.actor]?.full_name ?? a.actor, approve: 0, edit_approve: 0,
+      reject: 0, holding_reply: 0 };
+    tally[a.actor][kind] = Number(tally[a.actor][kind]) + 1;
+  }));
+  const kpisOf = (list: CaseDetail[]) => ({
+    waiting: list.filter((c) => ['PENDING_APPROVAL', 'FRAUD_QUEUE'].includes(c.status)).length,
+    awaiting_customer: list.filter((c) => c.status === 'AWAITING_CUSTOMER').length,
+    auto_sent: list.filter((c) => ['RESOLVED', 'ANSWERED', 'SENT'].includes(c.status)).length,
+    open: list.filter((c) => ['PENDING_APPROVAL', 'FRAUD_QUEUE', 'AWAITING_CUSTOMER'].includes(c.status)).length,
+    overdue: 0,
+    refund_sent_myr: sum(list.filter((c) => c.outcome === 'REFUND'
+      && ['RESOLVED', 'ANSWERED', 'APPROVED', 'SENT'].includes(c.status))),
+    refund_waiting_myr: sum(list.filter((c) => c.outcome === 'REFUND'
+      && ['PENDING_APPROVAL', 'FRAUD_QUEUE'].includes(c.status))),
+  });
+  let previous = null;
+  if (from && to) {
+    const length = (Date.parse(to) - Date.parse(from)) / 86400000;
+    const before = { date_from: shift(from, -length - 1), date_to: shift(from, -1) };
+    const earlier = matching(before.date_from, before.date_to);
+    previous = { ...before, total: earlier.length, kpis: kpisOf(earlier) };
+  }
+  const rowDays = [...new Set(rows.map((c) => c.received_at.slice(0, 10)))].sort();
+  const categories = [...new Set(rows.map((c) => valueOf(c, 'category')))].map((category) => {
+    const mine = rows.filter((c) => valueOf(c, 'category') === category);
+    return { category, n: mine.length, refund_sent_myr: kpisOf(mine).refund_sent_myr,
+      outcomes: countBy(mine, 'outcome') };
+  }).sort((a, b) => b.n - a.n || a.category.localeCompare(b.category));
+  return {
+    total: rows.length,
+    kpis: kpisOf(rows),
+    previous,
+    daily: rowDays.map((d) => {
+      const mine = rows.filter((c) => c.received_at.startsWith(d));
+      return { day: d, received: mine.length, ...kpisOf(mine) };
+    }),
+    categories,
+    by_day: Object.entries(byDay).sort().map(([key, n]) => ({ day: key.split('|')[0], status: key.split('|')[1], n })),
+    breakdowns: Object.fromEntries(Object.keys(DASHBOARD_COLUMNS).map((name) => [name, countBy(rows, name)])),
+    options: Object.fromEntries(Object.keys(DASHBOARD_COLUMNS).map((name) => [name, Object.keys(countBy(seen, name)).sort()])),
+    date_range: { first: days[0] ?? null, last },
+    applied: { date_from: from, date_to: to },
+    people: people ? Object.values(tally) : null,
+  };
+}
+
 export function installFakeApi(cases: CaseDetail[] = seedCases()) {
   const tokens = new Map<string, string>();
   const signedUp = new Map<string, string>();
-  const calls: { method: string; path: string; body: unknown }[] = [];
+  const calls: { method: string; path: string; body: unknown; search: string }[] = [];
 
   const account = (username: string): (Account & { username: string }) | null => {
     if (STAFF[username]) return { ...STAFF[username], username };
@@ -116,7 +201,7 @@ export function installFakeApi(cases: CaseDetail[] = seedCases()) {
     const path = url.pathname.replace(/^\/api/, '');
     const method = init?.method ?? 'GET';
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
-    calls.push({ method, path, body });
+    calls.push({ method, path, body, search: url.search });
     // Tokens are "token-<username>", issued by login or preset by renderApp; a customer must have signed up
     const token = (init?.headers as Record<string, string> | undefined)?.Authorization?.replace('Bearer ', '');
     const holder = token?.startsWith('token-') ? account(tokens.get(token) ?? token.slice('token-'.length)) : null;
@@ -163,6 +248,10 @@ export function installFakeApi(cases: CaseDetail[] = seedCases()) {
         && (q.get('people_only') !== 'true' || e.actor !== 'agent'));
       return json(200, { entries, actors: [...new Set(all.map((e) => e.actor).filter((a) => a !== 'agent'))].sort(),
         actions: [...new Set(all.map((e) => e.action))].sort() });
+    }
+    if (path === '/dashboard') {
+      if (who.role === 'customer') return fail(403, { code: 'FORBIDDEN', message: 'Your role (customer) cannot do this.' });
+      return json(200, dashboardOf(cases.filter((c) => visible(who, c)), url.searchParams, who.role === 'manager'));
     }
     if (path === '/cases/counts') {
       if (who.role === 'customer') return fail(403, { code: 'FORBIDDEN', message: 'Your role (customer) cannot do this.' });

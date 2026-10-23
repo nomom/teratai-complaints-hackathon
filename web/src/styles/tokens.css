@@ -52,6 +52,11 @@
   --orb-lo: rgba(59,30,143,0.55);
   --orb-edge: rgba(14,11,31,0.90);
   --orb-shadow: rgba(59,30,143,0.45);
+  /* Chart steps for ordered values (P1 > P2 > P3): strongest first. Checked for colour-blind separation and
+     contrast on --surface; on dark the strongest step is the lightest. */
+  --chart-seq-1: #C9BDFF;
+  --chart-seq-2: #9C86FF;
+  --chart-seq-3: #6D4AFF;
 }
 
 :root[data-theme="light"] {
@@ -104,6 +109,9 @@
   --orb-lo: rgba(140,116,240,0.45);
   --orb-edge: rgba(230,222,255,0.90);
   --orb-shadow: rgba(150,130,240,0.35);
+  --chart-seq-1: #5B36F2;
+  --chart-seq-2: #827FFB;
+  --chart-seq-3: #ABAEFF;
 }
 
 :root {

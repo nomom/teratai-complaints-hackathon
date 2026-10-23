@@ -11,10 +11,10 @@ async function navLinks() {
 
 describe('pages per role', () => {
   it.each([
-    ['officer1', ['Approval queue', 'Rejected', 'All cases', 'Submit complaint']],
-    ['fraud1', ['Fraud queue', 'Rejected', 'All cases', 'Submit complaint']],
+    ['officer1', ['Approval queue', 'Rejected', 'All cases', 'Dashboard', 'Submit complaint']],
+    ['fraud1', ['Fraud queue', 'Rejected', 'All cases', 'Dashboard', 'Submit complaint']],
     ['manager1', ['Approval queue', 'Fraud queue', 'Awaiting customer', 'Rejected', 'Resolved automatically', 'All cases',
-      'Audit log', 'Submit complaint']],
+      'Audit log', 'Dashboard', 'Submit complaint']],
   ])('%s sees exactly its pages', async (username, pages) => {
     installFakeApi();
     renderApp('/', { as: username });

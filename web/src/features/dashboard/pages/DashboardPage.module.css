@@ -1,0 +1,139 @@
+/* Dashboard layout. The phone layout is the base: one column; wider screens add columns. */
+
+.caption {
+  color: var(--text-2);
+  font-size: var(--text-sm);
+}
+
+/* Filters: one panel above everything they scope */
+.filterPanel {
+  padding: var(--space-4) var(--space-4) var(--space-2);
+  margin-bottom: var(--space-5);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--card-shadow);
+}
+
+.filters {
+  display: grid;
+  gap: 0 var(--space-4);
+}
+
+.filterFooter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: 42px;
+}
+
+/* While new filters load, the previous charts stay, dimmed */
+.body {
+  display: grid;
+  gap: var(--space-4);
+  transition: opacity 150ms ease;
+}
+
+.body[data-stale] {
+  opacity: 0.6;
+}
+
+.scorecards,
+.rates,
+.rankings {
+  display: grid;
+  gap: var(--space-4);
+}
+
+/* Volume over time */
+.volume {
+  min-width: 0;
+}
+
+.volumeHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+/* Per day / per week: a two-button toggle */
+.bucket {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--input-bg);
+}
+
+.bucket button {
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.bucket button:hover {
+  color: var(--text);
+  background: var(--neutral-tint);
+}
+
+.bucket button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+.bucket button:active {
+  background: var(--primary-tint);
+}
+
+.bucket button[aria-pressed='true'] {
+  color: var(--primary-ink);
+  background: var(--primary-tint);
+  border-color: var(--primary-border);
+  font-weight: 600;
+}
+
+@media (min-width: 560px) {
+  .scorecards,
+  .rates {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 720px) {
+  .filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1100px) {
+  .rankings {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1200px) {
+  .filters {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .scorecards,
+  .rates {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .body {
+    transition: none;
+  }
+}

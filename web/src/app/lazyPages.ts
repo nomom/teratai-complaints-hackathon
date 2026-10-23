@@ -10,6 +10,9 @@ export const AllCasesPage = lazy(() =>
 export const AuditLogPage = lazy(() =>
   import('@/features/cases/pages/AuditLogPage').then((m) => ({ default: m.AuditLogPage })));
 
+export const DashboardPage = lazy(() =>
+  import('@/features/dashboard/pages/DashboardPage').then((m) => ({ default: m.DashboardPage })));
+
 export const SubmitComplaintPage = lazy(() =>
   import('@/features/cases/pages/SubmitComplaintPage').then((m) => ({ default: m.SubmitComplaintPage })));
 
