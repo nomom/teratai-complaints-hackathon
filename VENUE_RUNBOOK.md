@@ -129,6 +129,8 @@ Risks: many venues block laptops from reaching each other, and the IP can change
 
 ## 7. Demo (16:30)
 
+**Rehearse the human gate first:** [`eval/human_gate/README.md`](eval/human_gate/README.md), 10 steps, a teammate on another laptop as the judge. The dashboard queues reload every 5 s, so a judge's complaint appears without a click.
+
 Human gate checklist per complaint: the case appears on its own; right transaction, decision and refund; right route;
 an approval case waits until we approve it (`case_state: awaiting_approval`, `sent: false`); a fraud case lands in the
 fraud queue; reply in the right language and consistent; self-check visible. Plan in [END_GOAL.md](END_GOAL.md),
@@ -141,7 +143,7 @@ agent's own bad draft.
 |---|---|
 | API URL given to the organisers | `http://10.0.30.141:8000` (venue Wi-Fi `DM-office 3`, `run_live.bat`; no firewall change needed: Python312 already allowed on Public) |
 | `api_check` (20) on the Wi-Fi URL from the serving laptop | **100.0**, 20/20 states, 0 critical, 9/9 probes, median 8.5 s, slowest 12.6 s (2026-10-23 morning) |
-| `api_check` from another laptop | |
+| `api_check` from another laptop | **100.0** from Clement's laptop on the Wi-Fi: `eval/sim` set, 11/11 states, 0 critical, 9/9 probes, slowest 6.6 s. (His own `localhost` instance scored 18.4: rules-only behaviour, not our server.) |
 | `load_test --n 20` on the Wi-Fi URL | 20/20 done and correct, POST max 318 ms, slowest 10.4 s; 40/40 cases LLM-read, no LLM failures |
 | Checkpoint 2 confirmed by the organisers | |
 | Freeze commit hash | |
