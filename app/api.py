@@ -13,7 +13,8 @@ the live round will: python scoring/api_check.py http://localhost:8000
 Everything else needs a login (app/UserAccessControl: POST /auth/login, then a Bearer token) and shows each role only
 its own cases: officer HUMAN_APPROVAL, fraud FRAUD_TEAM, manager all, customer their own (and only messages sent).
 The React app in web/ is the client: it calls the same GET /cases/{id} and POST /complaints with its token, and gets the
-staff view (full record and summary) instead of the contract view. A signed-in customer files with POST /me/complaints.
+staff view (full record and summary) instead of the contract view. A signed-in customer files with POST /me/complaints,
+and reads their own details and transactions with GET /me/profile and GET /me/transactions (app/customer_data.py).
 """
 import datetime as dt
 import functools
@@ -29,7 +30,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from agent.summary import case_summary
-from app import contract, store
+from app import contract, customer_data, store
 from app.UserAccessControl import roles
 from app.UserAccessControl import accounts
 from app.UserAccessControl.accounts import Account
@@ -164,6 +165,21 @@ def file_own_complaint(body: OwnComplaintIn, user: Account = Depends(require_rol
     cid = submit({"customer_id": user.username, "channel": "App chat", "received_at": APP_RECEIVED_AT,
                   "subject": body.subject.strip(), "text": body.text})
     return {"complaint_id": cid, "status": "QUEUED"}
+
+
+@app.get("/me/profile")
+def own_profile(user: Account = Depends(require_roles(roles.CUSTOMER))):
+    """The signed-in customer's personal details and accounts. Read only."""
+    found = customer_data.profile(user.username)
+    if found is None:
+        raise HTTPException(404, {"code": "NOT_A_CUSTOMER", "message": "We couldn't find your customer record."})
+    return found
+
+
+@app.get("/me/transactions")
+def own_transactions(user: Account = Depends(require_roles(roles.CUSTOMER))):
+    """The signed-in customer's transactions, newest first, each marked reportable or not from the app's date."""
+    return customer_data.transactions(user.username, APP_RECEIVED_AT)
 
 
 def _visible_case(complaint_id: str, user: Account) -> dict:
