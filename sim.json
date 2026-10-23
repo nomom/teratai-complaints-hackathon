@@ -1,0 +1,67 @@
+{
+  "base_url": "http://localhost:8000",
+  "score": 100.0,
+  "mean_points": 100.0,
+  "critical": {
+    "wrongful refund": 0,
+    "missed fraud": 0
+  },
+  "accuracy": {
+    "matched_txn_id": 1.0,
+    "outcome": 1.0,
+    "refund_amount_myr": 1.0,
+    "category": 1.0,
+    "priority": 1.0,
+    "reply_language": 1.0
+  },
+  "failures": [],
+  "state_matches_route": 1.0,
+  "median_seconds": 8.219079732894897,
+  "probes": [
+    {
+      "check": "GET /health returns 200",
+      "pass": true,
+      "http": 200
+    },
+    {
+      "check": "Unknown case ID returns 404",
+      "pass": true,
+      "http": 404
+    },
+    {
+      "check": "Complaint without text is rejected with 4xx",
+      "pass": true,
+      "http": 422
+    },
+    {
+      "check": "Unknown customer is handled without a 5xx",
+      "pass": true,
+      "http": 422
+    },
+    {
+      "check": "Posting the same complaint again doesn't change or duplicate the case",
+      "pass": true,
+      "http": 200
+    },
+    {
+      "check": "Approval case waits: awaiting_approval and sent false",
+      "pass": true,
+      "http": 200
+    },
+    {
+      "check": "Edited reply with an invented amount is refused (4xx) and nothing is sent",
+      "pass": true,
+      "http": 422
+    },
+    {
+      "check": "Approve moves SIM-02 to approved, sent true, records the actor, keeps the agent's decision",
+      "pass": true,
+      "http": 200
+    },
+    {
+      "check": "Acting on a case that is no longer waiting returns 409",
+      "pass": true,
+      "http": 409
+    }
+  ]
+}
