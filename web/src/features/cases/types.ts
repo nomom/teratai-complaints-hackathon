@@ -32,6 +32,8 @@ export interface CaseRow {
   created_at: string;
   updated_at: string;
   flagged: boolean;
+  /** Who last approved, rejected or sent the holding reply; null until a person acts. */
+  handled_by?: string | null;
 }
 
 export interface AuditEntry {
@@ -39,6 +41,20 @@ export interface AuditEntry {
   actor: string;
   action: string;
   detail: string;
+}
+
+/** GET /audit (manager only): every case's audit log, newest first, plus the people and actions for the filters. */
+export interface AuditLog {
+  entries: (AuditEntry & { id: number; complaint_id: string })[];
+  actors: string[];
+  actions: string[];
+}
+
+export interface AuditFilters {
+  actor?: string;
+  action?: string;
+  case?: string;
+  peopleOnly?: boolean;
 }
 
 /** The at-a-glance view from agent/summary.py. */

@@ -101,8 +101,12 @@ export function installFakeApi(cases: CaseDetail[] = seedCases()) {
   });
   const row = (c: CaseDetail): CaseRow => {
     const columns = Object.fromEntries(Object.entries(c).filter(([k]) => !['record', 'audit', 'summary'].includes(k)));
-    return { ...(columns as Omit<CaseRow, 'flagged'>), flagged: c.audit.some((a) => a.action === 'flagged_for_review') };
+    const handled = c.audit.findLast((a) => a.action === 'human_action' || a.action === 'holding_reply_sent');
+    return { ...(columns as Omit<CaseRow, 'flagged'>), flagged: c.audit.some((a) => a.action === 'flagged_for_review'),
+      handled_by: handled?.actor ?? null };
   };
+  const act = (c: CaseDetail, actor: string, action: string, detail: string) =>
+    c.audit.push({ ts: NOW, actor, action, detail });
   const json = (status: number, body: unknown) =>
     Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }));
   const fail = (status: number, detail: unknown) => json(status, { detail });
@@ -148,28 +152,56 @@ export function installFakeApi(cases: CaseDetail[] = seedCases()) {
         .sort((a, b) => b.updated_at.localeCompare(a.updated_at));
       return json(200, rows.map((c) => (who.role === 'customer' ? customerView(c) : row(c))));
     }
+    if (path === '/audit') {
+      if (who.role !== 'manager') return fail(403, { code: 'FORBIDDEN', message: `Your role (${who.role}) cannot do this.` });
+      const q = url.searchParams;
+      let id = 0;
+      const all = cases.flatMap((c) => c.audit.map((a) => ({ ...a, id: ++id, complaint_id: c.complaint_id }))).reverse();
+      const entries = all.filter((e) => (!q.get('actor') || e.actor === q.get('actor'))
+        && (!q.get('action') || e.action === q.get('action'))
+        && (!q.get('case') || e.complaint_id.includes(q.get('case')!))
+        && (q.get('people_only') !== 'true' || e.actor !== 'agent'));
+      return json(200, { entries, actors: [...new Set(all.map((e) => e.actor).filter((a) => a !== 'agent'))].sort(),
+        actions: [...new Set(all.map((e) => e.action))].sort() });
+    }
     if (path === '/cases/counts') {
       if (who.role === 'customer') return fail(403, { code: 'FORBIDDEN', message: 'Your role (customer) cannot do this.' });
       const counts: Record<string, number> = {};
       cases.filter((c) => visible(who, c)).forEach((c) => (counts[c.status] = (counts[c.status] ?? 0) + 1));
       return json(200, counts);
     }
-    const match = /^\/cases\/([^/]+)(?:\/(approve|reject|flag|messages))?$/.exec(path);
+    const match = /^\/cases\/([^/]+)(?:\/(approve|reject|flag|messages|holding-reply))?$/.exec(path);
     if (match) {
       const c = cases.find((x) => x.complaint_id === decodeURIComponent(match[1]));
       if (!c) return fail(404, 'not processed yet (is the worker running?)');
       if (!visible(who, c)) return fail(403, { code: 'FORBIDDEN', message: 'This case is not in your queue.', route: c.route });
       const action = match[2];
       if (!action) return json(200, who.role === 'customer' ? customerView(c) : c);
+      const failsCheck = () => String(body.reply_text ?? '').includes('TXN-9999999')
+        && fail(422, { error: 'reply failed the self-check', problems: ['Reply mentions TXN-9999999, which is not in the evidence'] });
       if (action === 'approve') {
-        if (String(body.reply_text ?? '').includes('TXN-9999999')) {
-          return fail(422, { error: 'reply failed the self-check', problems: ['Reply mentions TXN-9999999, which is not in the evidence'] });
-        }
+        const refused = failsCheck();
+        if (refused) return refused;
         c.status = 'APPROVED';
-        c.audit.push({ ts: NOW, actor: who.username, action: 'approved', detail: 'as drafted' });
+        act(c, who.username, 'human_action', JSON.stringify({ action: body.reply_text ? 'edit_approve' : 'approve',
+          actor: who.username, reason: body.note ?? '' }));
+        act(c, who.username, 'approved', body.reply_text ? 'edited' : 'as drafted');
       }
-      if (action === 'reject') c.status = 'REJECTED';
-      if (action === 'flag') c.audit.push({ ts: NOW, actor: who.username, action: 'flagged_for_review', detail: body.note });
+      if (action === 'reject') {
+        c.status = 'REJECTED';
+        act(c, who.username, 'rejected', body.note ?? '');
+        act(c, who.username, 'human_action', JSON.stringify({ action: 'reject', actor: who.username, reason: body.note ?? '' }));
+      }
+      if (action === 'holding-reply') {
+        if (who.role !== 'fraud' && who.role !== 'manager') return fail(403, { code: 'FORBIDDEN', message: 'Your role cannot do this.' });
+        if (c.status !== 'FRAUD_QUEUE') return fail(409, `${c.complaint_id} is not with the fraud team`);
+        if (c.audit.some((a) => a.action === 'holding_reply_sent')) return fail(409, 'the holding reply has already been sent');
+        const refused = failsCheck();
+        if (refused) return refused;
+        act(c, who.username, 'holding_reply_sent', body.reply_text ? 'edited' : 'as drafted');
+        act(c, who.username, 'reply_sent', body.reply_text ?? c.reply_text);
+      }
+      if (action === 'flag') act(c, who.username, 'flagged_for_review', body.note);
       c.updated_at = `2026-10-22 12:${String(calls.length).padStart(2, '0')}:00`;
       return json(200, c);
     }

@@ -15,7 +15,7 @@ STATE = {
     "AWAITING_CUSTOMER": ("auto_resolved", True),  # our follow-up question went out; the case reopens on their reply
     "SENT": ("auto_resolved", True),               # the old name for RESOLVED
     "PENDING_APPROVAL": ("awaiting_approval", False),
-    "FRAUD_QUEUE": ("with_fraud_team", False),     # we hold even the holding reply until the fraud team acts
+    "FRAUD_QUEUE": ("with_fraud_team", False),     # sent becomes true once the fraud team sends the holding reply
     "APPROVED": ("approved", True),
     "REJECTED": ("rejected", False),
 }
@@ -26,6 +26,8 @@ def case_view(case: dict) -> dict:
     rec = case["record"]
     d = rec["decision"]
     state, sent = STATE.get(case["status"], ("awaiting_approval", False))
+    if case["status"] == "FRAUD_QUEUE":
+        sent = store.holding_reply_sent(case)        # docs/api.md: with_fraud_team, at most a holding reply, sent either
     return {
         "complaint_id": case["complaint_id"],
         "status": "done",

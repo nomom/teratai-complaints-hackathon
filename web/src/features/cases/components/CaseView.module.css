@@ -70,6 +70,31 @@
   border-radius: var(--radius);
 }
 
+/* The review and reject steps open in place, under the reply: what is about to happen, then one button that does it */
+.panel {
+  margin-top: var(--space-3);
+  padding: var(--space-4);
+  background: var(--elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-card);
+}
+
+.panelTitle {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  margin: 0 0 var(--space-3);
+}
+
+.panelNote {
+  color: var(--text-2);
+  font-size: var(--text-sm);
+  margin: var(--space-3) 0;
+}
+
+.panel .facts {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
 .facts {
   display: grid;
   gap: var(--space-3);

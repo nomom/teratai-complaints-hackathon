@@ -211,6 +211,62 @@ def human_action(case):
     return json.loads(acts[-1]["detail"]) if acts else None
 
 
+def holding_reply_sent(case):
+    """Whether the fraud team has sent the holding reply on this case (it stays with them either way)."""
+    return any(a["action"] == "holding_reply_sent" for a in case.get("audit", []))
+
+
+def send_holding_reply(complaint_id, analyst, reply_text=None):
+    """The fraud team acknowledges a fraud case: the holding reply goes out, self-checked like any reply, and the case
+    stays in the fraud queue for the investigation. No decision and no money (docs/api.md, `with_fraud_team`)."""
+    with connect() as con:
+        row = con.execute("SELECT status, outcome, reply_text, reply_language, record FROM cases WHERE complaint_id = ?",
+                          (complaint_id,)).fetchone()
+        if not row or row["status"] != "FRAUD_QUEUE":
+            raise ValueError(f"{complaint_id} is not with the fraud team")
+        if con.execute("SELECT 1 FROM audit WHERE complaint_id = ? AND action = 'holding_reply_sent'",
+                       (complaint_id,)).fetchone():
+            raise ValueError(f"the holding reply for {complaint_id} has already been sent")
+        text = reply_text or row["reply_text"]
+        problems = recheck(row, text)
+        if not problems:
+            con.execute("UPDATE cases SET reply_text=?, updated_at=? WHERE complaint_id=?", (text, _now(), complaint_id))
+            audit(con, complaint_id, analyst, "holding_reply_sent", "edited" if reply_text else "as drafted")
+            audit(con, complaint_id, analyst, "reply_sent", text)
+            return
+    log(complaint_id, analyst, "approval_blocked", {"problems": problems, "edited": bool(reply_text), "text": text})
+    raise ReplyCheckFailed(problems)
+
+
+def handlers():
+    """complaint_id -> who last approved, rejected or sent the holding reply (the "Handled by" column)."""
+    with connect() as con:
+        return {r["complaint_id"]: r["actor"] for r in con.execute(
+            "SELECT complaint_id, actor FROM audit WHERE action IN ('human_action', 'holding_reply_sent') ORDER BY id")}
+
+
+def list_audit(actor=None, action=None, complaint_id=None, people_only=False, limit=500):
+    """The audit log across every case, newest first: the manager's view of who did what, when.
+    `complaint_id` matches part of the ID; `people_only` leaves out the agent's own entries."""
+    where, args = [], []
+    for column, value in (("actor", actor), ("action", action)):
+        if value:
+            where.append(f"{column} = ?")
+            args.append(value)
+    if complaint_id and complaint_id.strip():
+        where.append("complaint_id LIKE ?")
+        args.append(f"%{complaint_id.strip()}%")
+    if people_only:
+        where.append("actor != 'agent'")
+    q = ("SELECT id, complaint_id, ts, actor, action, detail FROM audit" + (" WHERE " + " AND ".join(where) if where else "")
+         + " ORDER BY id DESC LIMIT ?")
+    with connect() as con:
+        entries = [dict(r) for r in con.execute(q, (*args, limit))]
+        actors = [r["actor"] for r in con.execute("SELECT DISTINCT actor FROM audit WHERE actor != 'agent' ORDER BY actor")]
+        actions = [r["action"] for r in con.execute("SELECT DISTINCT action FROM audit ORDER BY action")]
+    return {"entries": entries, "actors": actors, "actions": actions}
+
+
 def counts(route=None, customer_id=None):
     """Cases per status; `route` or `customer_id` limit it to what one role may see (roles.case_filter)."""
     filters = {k: v for k, v in (("route", route), ("customer_id", customer_id)) if v}

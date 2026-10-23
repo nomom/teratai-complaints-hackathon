@@ -1,7 +1,8 @@
+import type { Column } from '../components/QueueTable';
 import type { CaseStatus } from '../types';
 import { AUTO_SENT } from './status';
 
-/** The four queue pages share one component; this is what differs between them. */
+/** The queue pages share one component; this is what differs between them. */
 export interface QueueConfig {
   title: string;
   statuses: CaseStatus[];
@@ -9,6 +10,9 @@ export interface QueueConfig {
   empty: string;
   actions?: boolean;
   flagFilter?: boolean;
+  /** Defaults to the work-queue columns and caption (QueuePage). */
+  columns?: Column[];
+  caption?: string;
 }
 
 export const QUEUES = {
@@ -31,6 +35,14 @@ export const QUEUES = {
     statuses: ['AWAITING_CUSTOMER'],
     subtitle: 'Open cases with no decision yet: we asked these customers for more details. Their reply continues the case.',
     empty: 'No customer owes us an answer right now.',
+  },
+  rejected: {
+    title: 'Rejected: handle manually',
+    statuses: ['REJECTED'],
+    subtitle: "An officer rejected the agent's decision, so nothing went out. Contact each customer and resolve it yourself.",
+    empty: 'No rejected cases waiting for a person.',
+    columns: ['priority', 'case', 'refund', 'category', 'outcome', 'handled', 'updated'],
+    caption: 'Sorted by priority. Select a row to see who rejected it and why.',
   },
   resolved: {
     title: 'Resolved automatically',

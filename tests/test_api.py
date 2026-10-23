@@ -138,6 +138,68 @@ class Api(unittest.TestCase):
         other = self.client.get("/me/transactions", headers=self.customer("CUS-00150")).json()["transactions"]
         self.assertNotIn("TXN-0119292", {r["txn_id"] for r in other})     # CUS-00001's charge, not theirs
 
+    # Reasons, the fraud team's holding reply, "Handled by" and the manager's audit log
+
+    def test_reject_and_edited_approval_keep_their_reason(self):
+        r = self.client.post(f"/cases/{APPROVAL}/reject", headers=self.headers("officer1"),
+                             json={"note": "journal shows full dispense"})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(store.human_action(store.get_case(APPROVAL))["reason"], "journal shows full dispense")
+        # an edited approval: the reason reaches human_action, as docs/api.md shows for edit_approve
+        store.save_case(process_complaint(tools.get_db().complaints[APPROVAL]))       # back in the queue
+        draft = store.get_case(APPROVAL)["reply_text"]
+        r = self.client.post(f"/cases/{APPROVAL}/approve", headers=self.headers("officer1"),
+                             json={"reply_text": draft + "\nThank you for your patience.", "note": "warmer closing"})
+        self.assertEqual(r.status_code, 200, r.text)
+        action = store.human_action(store.get_case(APPROVAL))
+        self.assertEqual((action["action"], action["reason"]), ("edit_approve", "warmer closing"))
+
+    def test_holding_reply_keeps_the_case_with_the_fraud_team(self):
+        self.assertIs(self.client.get(f"/cases/{FRAUD}").json()["sent"], False)
+        r = self.client.post(f"/cases/{FRAUD}/holding-reply", headers=self.headers("fraud1"), json={})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json()["status"], "FRAUD_QUEUE")                     # still with the fraud team
+        contract = self.client.get(f"/cases/{FRAUD}").json()
+        self.assertEqual((contract["case_state"], contract["sent"], contract["human_action"]),
+                         ("with_fraud_team", True, None))
+        # sent once only; the customer sees it
+        self.assertEqual(self.client.post(f"/cases/{FRAUD}/holding-reply", headers=self.headers("fraud1"),
+                                          json={}).status_code, 409)
+        own = self.client.get(f"/cases/{FRAUD}", headers=self.customer("CUS-02323")).json()
+        self.assertEqual([m["from"] for m in own["messages"]], ["bank"])
+
+    def test_holding_reply_is_self_checked_and_for_the_fraud_team_only(self):
+        draft = store.get_case(FRAUD)["reply_text"]
+        r = self.client.post(f"/cases/{FRAUD}/holding-reply", headers=self.headers("fraud1"),
+                             json={"reply_text": draft + "\nWe refunded RM999.00."})
+        self.assertEqual(r.status_code, 422)
+        self.assertFalse(store.holding_reply_sent(store.get_case(FRAUD)))
+        self.assertEqual(self.client.post(f"/cases/{FRAUD}/holding-reply", headers=self.headers("officer1"),
+                                          json={}).status_code, 403)
+        self.assertEqual(self.client.post(f"/cases/{APPROVAL}/holding-reply", headers=self.headers("manager1"),
+                                          json={}).status_code, 409)         # not a fraud case
+
+    def test_list_rows_say_who_handled_the_case(self):
+        self.client.post(f"/cases/{APPROVAL}/reject", headers=self.headers("officer1"), json={"note": "duplicate"})
+        rows = {r["complaint_id"]: r for r in self.client.get("/cases", headers=self.headers("manager1")).json()}
+        self.assertEqual((rows[APPROVAL]["handled_by"], rows[FRAUD]["handled_by"]), ("officer1", None))
+
+    def test_audit_log_is_for_the_manager_and_filters(self):
+        self.client.post(f"/cases/{APPROVAL}/reject", headers=self.headers("officer1"), json={"note": "duplicate"})
+        self.assertEqual(self.client.get("/audit", headers=self.headers("officer1")).status_code, 403)
+        self.assertEqual(self.client.get("/audit").status_code, 401)
+        everything = self.client.get("/audit", headers=self.headers("manager1")).json()
+        self.assertIn("officer1", everything["actors"])
+        self.assertNotIn("agent", everything["actors"])
+        self.assertIn("rejected", everything["actions"])
+        by_officer = self.client.get("/audit", headers=self.headers("manager1"), params={"actor": "officer1"}).json()
+        self.assertTrue(by_officer["entries"])
+        self.assertTrue(all(e["actor"] == "officer1" and e["complaint_id"] == APPROVAL for e in by_officer["entries"]))
+        people = self.client.get("/audit", headers=self.headers("manager1"), params={"people_only": True}).json()
+        self.assertTrue(all(e["actor"] != "agent" for e in people["entries"]))
+        one_case = self.client.get("/audit", headers=self.headers("manager1"), params={"case": "00387"}).json()
+        self.assertEqual({e["complaint_id"] for e in one_case["entries"]}, {FRAUD})
+
 
 if __name__ == "__main__":
     unittest.main()

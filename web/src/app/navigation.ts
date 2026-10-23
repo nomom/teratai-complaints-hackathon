@@ -1,11 +1,13 @@
 import {
   CheckCheck,
+  CircleX,
   FolderOpen,
   Hourglass,
   Inbox,
   ListChecks,
   MessagesSquare,
   ReceiptText,
+  ScrollText,
   Shield,
   SquarePen,
   UserRound,
@@ -15,8 +17,8 @@ import {
 import type { Role } from '@/features/auth/types';
 
 export type PageKey =
-  | 'approval' | 'fraud' | 'awaiting' | 'resolved' | 'cases' | 'intake' | 'myCases' | 'newComplaint'
-  | 'profile' | 'transactions';
+  | 'approval' | 'fraud' | 'awaiting' | 'rejected' | 'resolved' | 'cases' | 'audit' | 'intake' | 'myCases'
+  | 'newComplaint' | 'profile' | 'transactions';
 /** 'Account' pages open from the account menu at the bottom of the sidebar, not from the page list. */
 export type Section = 'Queues' | 'Records' | 'Intake' | 'My bank' | 'Account';
 
@@ -32,8 +34,10 @@ export const PAGE_DEFS: Record<PageKey, PageDef> = {
   approval: { key: 'approval', title: 'Approval queue', path: '/approval', icon: ListChecks, section: 'Queues' },
   fraud: { key: 'fraud', title: 'Fraud queue', path: '/fraud', icon: Shield, section: 'Queues' },
   awaiting: { key: 'awaiting', title: 'Awaiting customer', path: '/awaiting', icon: Hourglass, section: 'Queues' },
+  rejected: { key: 'rejected', title: 'Rejected', path: '/rejected', icon: CircleX, section: 'Queues' },
   resolved: { key: 'resolved', title: 'Resolved automatically', path: '/resolved', icon: CheckCheck, section: 'Records' },
   cases: { key: 'cases', title: 'All cases', path: '/cases', icon: FolderOpen, section: 'Records' },
+  audit: { key: 'audit', title: 'Audit log', path: '/audit', icon: ScrollText, section: 'Records' },
   intake: { key: 'intake', title: 'Submit complaint', path: '/intake', icon: Inbox, section: 'Intake' },
   myCases: { key: 'myCases', title: 'My cases', path: '/my-cases', icon: MessagesSquare, section: 'My bank' },
   newComplaint: { key: 'newComplaint', title: 'New complaint', path: '/new-complaint', icon: SquarePen, section: 'My bank' },
@@ -43,9 +47,9 @@ export const PAGE_DEFS: Record<PageKey, PageDef> = {
 
 /** Each role sees exactly these pages; the first is where it lands after signing in. */
 export const PAGES_BY_ROLE: Record<Role, PageKey[]> = {
-  officer: ['approval', 'cases', 'intake'],
-  fraud: ['fraud', 'cases', 'intake'],
-  manager: ['approval', 'fraud', 'awaiting', 'resolved', 'cases', 'intake'],
+  officer: ['approval', 'rejected', 'cases', 'intake'],
+  fraud: ['fraud', 'rejected', 'cases', 'intake'],
+  manager: ['approval', 'fraud', 'awaiting', 'rejected', 'resolved', 'cases', 'audit', 'intake'],
   customer: ['myCases', 'newComplaint', 'profile', 'transactions'],
 };
 

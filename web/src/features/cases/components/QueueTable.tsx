@@ -7,7 +7,8 @@ import { STATUS } from '../lib/status';
 import type { CaseRow } from '../types';
 import styles from './QueueTable.module.css';
 
-export type Column = 'priority' | 'case' | 'refund' | 'sla' | 'category' | 'outcome' | 'status' | 'checked' | 'updated';
+export type Column =
+  | 'priority' | 'case' | 'refund' | 'sla' | 'category' | 'outcome' | 'status' | 'checked' | 'handled' | 'updated';
 
 const HEADERS: Record<Column, string> = {
   priority: 'Priority',
@@ -18,6 +19,7 @@ const HEADERS: Record<Column, string> = {
   outcome: 'Outcome',
   status: 'Status',
   checked: 'Reply checked',
+  handled: 'Handled by',
   updated: 'Updated',
 };
 
@@ -39,6 +41,8 @@ function cell(row: CaseRow, column: Column, now: Date) {
       return STATUS[row.status]?.label ?? row.status;
     case 'checked':
       return row.check_ok ? 'yes' : 'NO';
+    case 'handled':
+      return row.handled_by ?? '-';
     case 'updated':
       return row.updated_at;
   }
