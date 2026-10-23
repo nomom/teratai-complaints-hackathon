@@ -17,6 +17,8 @@ falling back to the rules, not as wrong refunds.
 | **OpenRouter `google/gemma-4-26b-a4b-it`** (`OPENROUTER_REASONING=off`, `OPENROUTER_IGNORE=darkbloom`) | $0.08 / $0.35 | 100.00 (2 runs) | **0** | 13 / 14 (LIVE-01: read the RM100 shortfall as the amount, 1 in 4 tries) | not run yet | 3.4 s median (1.8–13.6) | 2 min 44 s | 2,095 / 218 | $0.00024 | $0.05 | $0.18 | 0 (3 of 14 before ignoring Darkbloom) | 2026-10-23 |
 | **OpenRouter `openai/gpt-oss-120b`** (`OPENROUTER_REASONING=low`) | $0.03 / $0.15 (cheapest host; $0.15 / $0.60 headline) | 100.00 (2 runs) | **0** | **14 / 14** | not run yet | 5.3 s median (2.2–7.0) | 2 min 15–30 s | 2,070 / 310 | $0.00011 list, **$0.00013 billed** | $0.02 list, **$0.023–0.030 billed** | $0.08 list, **$0.10 billed** | 1 bad_json in 801 calls | 2026-10-23 |
 | **DeepSeek `deepseek-flash`** (V4.1-Flash, DeepSeek's own API, `DEEPSEEK_REASONING_EFFORT=none`) | $0.30 / $1.20 peak, half off-peak; cached input $0.006 | 100.00 (2 runs) | **0** | **14 / 14** | 194 / 200 (the 3 matching gaps + 3 own: LIVE-01, and LIVE-38, LIVE-62 right on a rerun) | **2.2 s median (1.9–3.1)** | **60–61 s** | 2,454 / 209 | $0.00099 uncached list, **≈ $0.00034 with its 90% cache hits** (peak) | $0.20 list, ≈ $0.07 cached | $0.74 list, **≈ $0.25 cached** (peak; ≈ $0.13 off-peak) | 0 | 2026-10-23 |
+| **OpenRouter `qwen/qwen3.8-27b`** (`OPENROUTER_REASONING=off`) | $0.20 / $2.50 | not run | – | 14 / 14 | 195 / 200 (the 3 matching gaps + 2 own, both repeat: LIVE-38, LIVE-102) | 5.2 s median (2.1–26.5) | not run | 2,102 / 222 | $0.00098 | – | $0.73 | 0 | 2026-10-23 |
+| **OpenAI `gpt-6-luna`** | $0.10 / $0.50 (third-party trackers; not confirmed on OpenAI's page) | not run | – | 14 / 14 | 195 / 200 (the 3 matching gaps + 2 own: LIVE-42 every time, LIVE-62 2 of 3) | 5.2 s median (3.1–9.2) | not run | 2,201 / 328 | $0.00038 | – | $0.29 | 0 | 2026-10-23 |
 | *next model* | | | | | | | | |  | | | | |
 
 **How to read it**
@@ -78,9 +80,11 @@ to the model.
 | Rules only | 100 / 200 | – | – | 2026-10-23 |
 | gpt-5.6-luna | **197 / 200** | **0** | 4.2 s (2.6–7.7) | 2026-10-23 |
 | DeepSeek V4.1-Flash | 194 / 200 | 3: LIVE-01 ("took out RM200, got RM100" read as RM100, as Gemma did), LIVE-38 and LIVE-62 (right on a rerun) | **2.4 s** (1.7–5.3) | 2026-10-23 |
+| Qwen3.8-27B | 195 / 200 | 2, both repeat on 2 reruns: LIVE-38 (shortfall only implied by counting notes: declined), LIVE-102 (the account balance taken as the fee amount: wrong fee) | 5.2 s (2.1–26.5) | 2026-10-23 |
+| gpt-6-luna | 195 / 200 | 2: LIVE-42 ("short-changed by RM100 ... I'd asked for RM400" read as RM100: declined; 3 of 3 runs), LIVE-62 (the doubled total as the only hint: declined; 2 of 3 runs) | 5.2 s (3.1–9.2) | 2026-10-23 |
 | Qwen3.6, Gemma 4, gpt-oss-120b | not run yet | | | |
 
-Outputs: `runtime/eval/live200_luna.txt`, `runtime/eval/live200_deepseek.txt`.
+Outputs: `runtime/eval/live200_luna.txt`, `runtime/eval/live200_deepseek.txt`, `runtime/eval/live200_qwen38-27b.txt`, `runtime/eval/live200_gpt6-luna.txt`.
 
 ## gpt-5.6-luna in detail (baseline)
 
