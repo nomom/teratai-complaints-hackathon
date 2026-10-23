@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import * as casesApi from './api';
-import type { CaseStatus } from './types';
+import type { AuditFilters, CaseStatus } from './types';
 
 export const caseKeys = {
   all: ['cases'] as const,
@@ -34,15 +34,30 @@ function useInvalidateCases() {
 export function useApprove() {
   const invalidate = useInvalidateCases();
   return useMutation({
-    mutationFn: ({ id, replyText }: { id: string; replyText: string | null }) => casesApi.approveCase(id, replyText),
+    mutationFn: ({ id, replyText, note }: { id: string; replyText: string | null; note?: string }) =>
+      casesApi.approveCase(id, replyText, note),
     onSuccess: invalidate,
   });
 }
 
 export function useReject() {
   const invalidate = useInvalidateCases();
-  return useMutation({ mutationFn: (id: string) => casesApi.rejectCase(id), onSuccess: invalidate });
+  return useMutation({
+    mutationFn: ({ id, note }: { id: string; note: string }) => casesApi.rejectCase(id, note),
+    onSuccess: invalidate,
+  });
 }
+
+export function useHoldingReply() {
+  const invalidate = useInvalidateCases();
+  return useMutation({
+    mutationFn: ({ id, replyText }: { id: string; replyText: string | null }) => casesApi.sendHoldingReply(id, replyText),
+    onSuccess: invalidate,
+  });
+}
+
+export const useAuditLog = (filters: AuditFilters) =>
+  useQuery({ queryKey: [...caseKeys.all, 'audit', filters], queryFn: () => casesApi.listAudit(filters) });
 
 export function useFlag() {
   const invalidate = useInvalidateCases();

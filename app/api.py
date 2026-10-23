@@ -15,6 +15,8 @@ its own cases: officer HUMAN_APPROVAL, fraud FRAUD_TEAM, manager all, customer t
 The React app in web/ is the client: it calls the same GET /cases/{id} and POST /complaints with its token, and gets the
 staff view (full record and summary) instead of the contract view. A signed-in customer files with POST /me/complaints,
 and reads their own details and transactions with GET /me/profile and GET /me/transactions (app/customer_data.py).
+The fraud team acknowledges a case with POST /cases/{id}/holding-reply (the case stays with them), and a manager reads
+the audit log across every case with GET /audit.
 """
 import datetime as dt
 import functools
@@ -194,11 +196,13 @@ def _visible_case(complaint_id: str, user: Account) -> dict:
     return c
 
 
-def _row(user: Account, case: dict, flagged: set) -> dict:
-    """A list row: the case's columns without the full record (GET /cases/{id} has it), plus whether it is flagged."""
+def _row(user: Account, case: dict, flagged: set, handled: dict) -> dict:
+    """A list row: the case's columns without the full record (GET /cases/{id} has it), plus whether it is flagged
+    and who last acted on it (approved, rejected or sent the holding reply)."""
     if user.role == roles.CUSTOMER:
         return roles.customer_view(case)
-    return {**{k: v for k, v in case.items() if k != "record"}, "flagged": case["complaint_id"] in flagged}
+    return {**{k: v for k, v in case.items() if k != "record"}, "flagged": case["complaint_id"] in flagged,
+            "handled_by": handled.get(case["complaint_id"])}
 
 
 @app.get("/cases")
@@ -206,8 +210,10 @@ def cases(status: Optional[str] = None, limit: int = 200, user: Account = Depend
     """`status` may list several, comma-separated: ?status=RESOLVED,ANSWERED. Rows are the case's columns, newest
     first, without the full record."""
     rows = store.list_cases(status.split(",") if status else None, limit, **roles.case_filter(user))
-    flagged = store.flagged_ids() if user.role != roles.CUSTOMER else set()
-    return [_row(user, c, flagged) for c in rows]
+    staff = user.role != roles.CUSTOMER
+    flagged = store.flagged_ids() if staff else set()
+    handled = store.handlers() if staff else {}
+    return [_row(user, c, flagged, handled) for c in rows]
 
 
 @app.get("/cases/counts")
@@ -276,12 +282,34 @@ def act(complaint_id: str, body: ActionIn):
 def approve(complaint_id: str, body: ApprovalIn, user: Account = Depends(require_roles(*roles.STAFF_ROLES))):
     _visible_case(complaint_id, user)
     try:
-        store.approve(complaint_id, user.username, body.reply_text)
+        store.approve(complaint_id, user.username, body.reply_text, reason=body.note.strip())
     except store.ReplyCheckFailed as e:          # nothing sent: the officer must fix the reply
         raise HTTPException(422, {"error": "reply failed the self-check", "problems": e.problems})
     except ValueError as e:
         raise HTTPException(409, str(e))
     return store.get_case(complaint_id)
+
+
+@app.post("/cases/{complaint_id}/holding-reply")
+def holding_reply(complaint_id: str, body: ApprovalIn,
+                  user: Account = Depends(require_roles(roles.FRAUD, roles.MANAGER))):
+    """The fraud team sends the holding reply (self-checked, edited or not). The case stays in the fraud queue."""
+    _visible_case(complaint_id, user)
+    try:
+        store.send_holding_reply(complaint_id, user.username, body.reply_text)
+    except store.ReplyCheckFailed as e:
+        raise HTTPException(422, {"error": "reply failed the self-check", "problems": e.problems})
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+    return store.get_case(complaint_id)
+
+
+@app.get("/audit")
+def audit_log(actor: Optional[str] = None, action: Optional[str] = None, case: Optional[str] = None,
+              people_only: bool = False, limit: int = 500, user: Account = Depends(require_roles(roles.MANAGER))):
+    """Every case's audit log in one list, newest first (manager only): filter by who, by action, or by part of a
+    case ID. Also returns the people and actions that occur, for the filters."""
+    return store.list_audit(actor, action, case, people_only, min(max(limit, 1), 5000))
 
 
 @app.post("/cases/{complaint_id}/reject")

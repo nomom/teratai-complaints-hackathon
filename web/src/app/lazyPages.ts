@@ -7,6 +7,9 @@ export const QueuePage = lazy(() => import('@/features/cases/pages/QueuePage').t
 export const AllCasesPage = lazy(() =>
   import('@/features/cases/pages/AllCasesPage').then((m) => ({ default: m.AllCasesPage })));
 
+export const AuditLogPage = lazy(() =>
+  import('@/features/cases/pages/AuditLogPage').then((m) => ({ default: m.AuditLogPage })));
+
 export const SubmitComplaintPage = lazy(() =>
   import('@/features/cases/pages/SubmitComplaintPage').then((m) => ({ default: m.SubmitComplaintPage })));
 

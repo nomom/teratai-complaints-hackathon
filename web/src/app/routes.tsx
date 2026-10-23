@@ -9,6 +9,7 @@ import { RequireAuth, RequirePage, RoleHome } from './guards';
 import { AppShell } from './layout/AppShell';
 import {
   AllCasesPage,
+  AuditLogPage,
   MyCasesPage,
   NewComplaintPage,
   ProfilePage,
@@ -42,8 +43,10 @@ export const routes: RouteObject[] = [
       page('approval', <QueuePage key="approval" config={QUEUES.approval} />),
       page('fraud', <QueuePage key="fraud" config={QUEUES.fraud} />),
       page('awaiting', <QueuePage key="awaiting" config={QUEUES.awaiting} />),
+      page('rejected', <QueuePage key="rejected" config={QUEUES.rejected} />),
       page('resolved', <QueuePage key="resolved" config={QUEUES.resolved} />),
       page('cases', <AllCasesPage />),
+      page('audit', <AuditLogPage />),
       page('intake', <SubmitComplaintPage />),
       page('myCases', <MyCasesPage />),
       page('newComplaint', <NewComplaintPage />),
