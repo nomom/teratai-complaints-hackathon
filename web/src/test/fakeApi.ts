@@ -20,7 +20,7 @@ const CUSTOMERS: Record<string, string> = { 'CUS-00150': 'Ravi a/l Rajan', 'CUS-
 
 const NOW = '2026-10-22 10:00:00';
 
-function makeCase(id: string, over: Partial<CaseDetail>): CaseDetail {
+export function makeCase(id: string, over: Partial<CaseDetail>): CaseDetail {
   return {
     complaint_id: id, customer_id: 'CUS-00150', received_at: '2026-09-29 10:00', channel: 'App chat',
     text: `Complaint text of ${id}`, category: 'FAILED_TRANSFER', matched_txn_id: 'TXN-0000001', outcome: 'REFUND',
