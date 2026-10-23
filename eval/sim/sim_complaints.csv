@@ -1,0 +1,12 @@
+complaint_id,customer_id,received_at,channel,subject,text
+SIM-01,CUS-00998,2026-09-30 10:05,App chat,,The cash machine at the Kuala Terengganu branch only gave me RM100 when I took out RM200 on the 13th. Where is my other RM100?
+SIM-02,CUS-02372,2026-09-30 10:12,Social media DM,,"Mesin kat Melaka Market telan duit saya RM1,500 Jumaat lepas, satu sen pun tak keluar tapi baki dah kena potong. Geram betul."
+SIM-03,CUS-00157,2026-09-30 10:20,Email,Double charge,Please investigate - TiketKu Travel took RM353.53 from my card ending 7124 two times on 9 Sept. I only bought one ticket.
+SIM-04,CUS-00606,2026-09-30 10:31,Email,,My rent payment to Firdaus bin Rahman (RM155.84 by IBG) on 7 September never reached him and my landlord is chasing me. Where did the money go?
+SIM-05,CUS-02233,2026-09-30 10:40,App chat,,A guy on Telegram promised me 30% weekly returns trading gold. I sent RM906.50 to Amirul bin Omar on 20 Sept and now he has blocked me everywhere.
+SIM-06,CUS-01129,2026-09-30 10:48,Branch form,,"Ada orang mengaku pegawai mahkamah, kata saya ada saman tertunggak dan suruh saya bayar RM946.85 kepada Faris bin Ismail pada 16 haribulan. Baru sedar saya kena tipu."
+SIM-07,CUS-01405,2026-09-30 11:02,App chat,,There's a RM705.57 payment to LUXEGOODS LONDON on my card 2040 from 24 Sept. I've never shopped there and my card has been in my wallet the whole time.
+SIM-08,CUS-02498,2026-09-30 11:15,App chat,,"Saya tak pernah beli tiket RM1,425.90 dari TiketKu Travel pada 5 Sept tu. Siapa yang guna kad saya ni?"
+SIM-09,CUS-02840,2026-09-30 11:30,Call centre note,,"Cust called. Says RM111.40 at Restoran Selera George Town on 15/9 was not her, she was in KL that whole day. Card ending 2365 still with her."
+SIM-10,CUS-00890,2026-09-30 11:41,Email,,Why did you take RM12 from my account on 26 September? I was told my debit card was free for life.
+SIM-11,CUS-00150,2026-09-30 11:50,App chat,,Since Monday your app keeps saying 'session expired' the moment I log in. Sort it out please.

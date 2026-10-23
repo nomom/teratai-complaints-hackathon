@@ -139,10 +139,10 @@ agent's own bad draft.
 
 | Check | Result |
 |---|---|
-| API URL given to the organisers | |
-| `api_check` on localhost (20) | |
+| API URL given to the organisers | `http://10.0.30.141:8000` (venue Wi-Fi `DM-office 3`, `run_live.bat`; no firewall change needed: Python312 already allowed on Public) |
+| `api_check` (20) on the Wi-Fi URL from the serving laptop | **100.0**, 20/20 states, 0 critical, 9/9 probes, median 8.5 s, slowest 12.6 s (2026-10-23 morning) |
 | `api_check` from another laptop | |
-| `load_test --n 20` through the public URL | |
+| `load_test --n 20` on the Wi-Fi URL | 20/20 done and correct, POST max 318 ms, slowest 10.4 s; 40/40 cases LLM-read, no LLM failures |
 | Checkpoint 2 confirmed by the organisers | |
 | Freeze commit hash | |
 | PR link | |
