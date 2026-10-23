@@ -1,5 +1,6 @@
 .shell {
   min-height: 100vh;
+  isolation: isolate;
 }
 
 .main {
@@ -11,10 +12,22 @@
   display: none;
 }
 
+/* The customer's app: one calm column, like their banking app, not an operations tool. */
+.customerShell {
+  min-height: 100vh;
+  isolation: isolate;
+}
+
+.customerMain {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-4) var(--space-8);
+}
+
 @media (min-width: 960px) {
   .shell {
     display: grid;
-    grid-template-columns: 280px minmax(0, 1fr);
+    grid-template-columns: 272px minmax(0, 1fr);
   }
 
   .main {
@@ -25,5 +38,9 @@
     display: flex;
     justify-content: flex-end;
     margin-bottom: var(--space-2);
+  }
+
+  .customerMain {
+    padding-top: var(--space-8);
   }
 }

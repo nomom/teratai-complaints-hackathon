@@ -90,7 +90,7 @@ export function CaseBody({ caseItem, actions }: { caseItem: CaseDetail; actions:
         <ReplyActions key={caseItem.complaint_id + caseItem.updated_at} caseItem={caseItem} />
       ) : (
         <div className={styles.block}>
-          <TextArea label={sent ? 'Reply sent to the customer' : 'Reply to the customer'} rows={8}
+          <TextArea label={sent ? 'Reply sent to the customer' : 'Reply to the customer, drafted by the agent'} rows={8}
             value={caseItem.reply_text} readOnly />
           {sent && <FlagForReview caseId={caseItem.complaint_id} />}
         </div>

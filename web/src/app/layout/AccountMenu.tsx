@@ -11,8 +11,9 @@ import { pagesFor } from '../navigation';
 import { ThemeSwitch } from '../providers/ThemeSwitch';
 import styles from './AccountMenu.module.css';
 
-/** Who is signed in, at the bottom of the sidebar. Opens upward: the role's account pages, the theme and Log out. */
-export function AccountMenu() {
+/** Who is signed in: at the bottom of the staff sidebar (opens upward) or in the customer's top bar (opens downward,
+ *  `compact`). It holds the role's account pages, the theme and Log out. */
+export function AccountMenu({ compact = false }: { compact?: boolean }) {
   const user = useUser();
   const { signOut } = useAuth();
   const navigate = useNavigate();
@@ -20,7 +21,7 @@ export function AccountMenu() {
   const pages = pagesFor(user.role).filter((p) => p.section === 'Account');
 
   const trigger = (
-    <button type="button" className={styles.trigger} aria-label={`${user.full_name}, account menu`}>
+    <button type="button" className={clsx(styles.trigger, compact && styles.compact)} aria-label={`${user.full_name}, account menu`}>
       <Avatar name={user.full_name} />
       <span className={styles.who}>
         <span className={styles.name}>{user.full_name}</span>
@@ -31,7 +32,7 @@ export function AccountMenu() {
   );
 
   return (
-    <Popover trigger={trigger} open={open} onOpenChange={setOpen} side="top" className={styles.menu}>
+    <Popover trigger={trigger} open={open} onOpenChange={setOpen} side={compact ? 'bottom' : 'top'} className={styles.menu}>
       <div className={styles.header}>
         <p className={styles.headerName}>{user.full_name}</p>
         <p className={styles.headerSub}>Signed in as {user.username}</p>

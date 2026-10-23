@@ -167,20 +167,21 @@ function Board({ data, filters, bucket, columns, onBucket, selected, setValue }:
   return (
     <>
       <section className={styles.scorecards} aria-label="Scorecards">
-        <Scorecard label="Complaints received" value={count(data.total)} kind="bars"
+        <Scorecard label="Complaints received" value={count(data.total)} countTo={{ to: data.total }} kind="bars"
           note={`${share(kpis.auto_sent, data.total)}% resolved with no person involved`}
           points={trend((d) => d.received)} format={count}
           change={previous && delta(data.total, previous.total, 'neutral')} comparedWith={against} />
-        <Scorecard label="Waiting for a person" value={count(kpis.waiting)}
+        <Scorecard label="Waiting for a person" value={count(kpis.waiting)} countTo={{ to: kpis.waiting }}
           note={kpis.awaiting_customer ? `${count(kpis.awaiting_customer)} more waiting for the customer`
             : 'In the approval and fraud queues'}
           points={trend((d) => d.waiting)} format={count}
           change={previous && delta(kpis.waiting, previous.kpis.waiting, 'down')} comparedWith={against} />
-        <Scorecard label="Past the acknowledgement time" value={count(kpis.overdue)}
+        <Scorecard label="Past the acknowledgement time" value={count(kpis.overdue)} countTo={{ to: kpis.overdue }}
           note={`Of ${count(kpis.open)} open cases`}
           points={trend((d) => d.overdue)} format={count}
           change={previous && delta(kpis.overdue, previous.kpis.overdue, 'down')} comparedWith={against} />
         <Scorecard label="Refunds sent" value={money(kpis.refund_sent_myr)}
+          countTo={{ to: kpis.refund_sent_myr, prefix: 'RM ', decimals: 2 }}
           note={`${money(kpis.refund_waiting_myr)} more waiting for approval`}
           points={trend((d) => d.refund_sent_myr)} format={money}
           change={previous && delta(kpis.refund_sent_myr, previous.kpis.refund_sent_myr, 'neutral')}

@@ -6,6 +6,7 @@
   min-height: 52px;
   padding: var(--space-2) var(--space-3);
   background: var(--surface);
+  color: var(--text);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
   text-align: left;
@@ -131,4 +132,18 @@
 
 .theme {
   padding: var(--space-2) var(--space-2) var(--space-1);
+}
+
+/* In the customer's top bar: just the avatar and name, no card. */
+.compact {
+  width: auto;
+  min-height: 44px;
+  background: transparent;
+  border-color: transparent;
+}
+
+@media (max-width: 640px) {
+  .compact .who {
+    display: none;
+  }
 }

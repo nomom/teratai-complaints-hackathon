@@ -116,8 +116,8 @@ export function ReplyActions({ caseItem }: { caseItem: CaseDetail }) {
   return (
     <div className={styles.block}>
       <SelfCheckLine warnings={caseItem.summary.warnings} edited={edited} />
-      <TextArea label={fraud ? 'Holding reply to the customer (edit before sending if needed)'
-        : 'Reply to the customer (edit before approving if needed)'} rows={9} value={text}
+      <TextArea label={fraud ? 'Holding reply to the customer, drafted by the agent (edit before sending if needed)'
+        : 'Reply to the customer, drafted by the agent (edit before approving if needed)'} rows={9} value={text}
         readOnly={step !== 'edit'} onChange={(e) => {
           setText(e.target.value);
           setProblem(null);

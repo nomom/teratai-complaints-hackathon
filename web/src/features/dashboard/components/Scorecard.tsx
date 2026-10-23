@@ -2,6 +2,8 @@ import { clsx } from 'clsx';
 import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react';
 import { useState } from 'react';
 
+import CountUp from '@/components/reactbits/CountUp';
+
 import type { Delta } from '../lib/kpi';
 import { shortDay } from '../lib/series';
 import styles from './charts.module.css';
@@ -10,6 +12,8 @@ import { Sparkline } from './Sparkline';
 interface ScorecardProps {
   label: string;
   value: string;
+  /** The figure as a number, to count up to when the card appears (React Bits CountUp); `value` is used without it. */
+  countTo?: { to: number; prefix?: string; decimals?: number };
   /** A short line under the figure, e.g. what is still waiting. */
   note?: string;
   points: { day: string; value: number }[];
@@ -25,7 +29,7 @@ interface ScorecardProps {
 const ARROW = { up: ArrowUpRight, down: ArrowDownRight, flat: Minus };
 
 /** A KPI: the figure, a daily trend, and how it moved against the period before (arrow plus words, never colour alone). */
-export function Scorecard({ label, value, note, points, kind, format, change, comparedWith }: ScorecardProps) {
+export function Scorecard({ label, value, countTo, note, points, kind, format, change, comparedWith }: ScorecardProps) {
   const [active, setActive] = useState<number | null>(null);
   const point = active !== null ? points[active] : null;
   const Arrow = change ? ARROW[change.direction] : Minus;
@@ -33,7 +37,10 @@ export function Scorecard({ label, value, note, points, kind, format, change, co
   return (
     <article className={styles.scorecard} aria-label={label}>
       <h2 className={styles.cardLabel}>{label}</h2>
-      <p className={styles.scoreValue}>{value}</p>
+      <p className={styles.scoreValue}>
+        {countTo ? <CountUp to={countTo.to} prefix={countTo.prefix} decimals={countTo.decimals} separator=","
+          duration={1.2} trigger="load" /> : value}
+      </p>
       {note && <p className={styles.scoreNote}>{note}</p>}
       <Sparkline points={points} kind={kind} active={active} onActive={setActive} />
       <p className={styles.sparkReadout} aria-hidden>

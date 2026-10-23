@@ -6,9 +6,9 @@ const KEY = 'teratai.theme';
 
 function storedTheme(): Theme {
   try {
-    return localStorage.getItem(KEY) === 'light' ? 'light' : 'dark';
+    return localStorage.getItem(KEY) === 'dark' ? 'dark' : 'light';
   } catch {
-    return 'dark';
+    return 'light';
   }
 }
 
@@ -19,7 +19,7 @@ interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
-/** Dark by default. The choice is set on <html data-theme> and remembered in this browser (it outlives sign-out). */
+/** Light by default (it reads on a projector). The choice is set on <html data-theme> and remembered in this browser (it outlives sign-out). */
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(storedTheme);
 

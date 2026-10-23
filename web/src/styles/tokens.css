@@ -1,27 +1,96 @@
-/* Design tokens: the Teratai Ops system (PersonC's ui_kit, with the contrast-checked --border-strong).
-   Dark is the default; [data-theme] on <html> switches. Components use these variables only, never hex. */
+/* Design tokens: Teratai ("lotus"), seen through the kingfisher that hunts the lotus pond: kingfisher blue for the
+   officer's desk, actions and the orb, its tangerine breast for the manager, night indigo for the fraud desk, lotus
+   pink for the customer's own app, green only for the lily pads. Light is the default (it reads on a projector); [data-theme]
+   on <html> switches. [data-role] on <html> gives each desk its own colour. Components use these variables only. */
 
 :root,
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #F2F6FA;
+  --surface: #FFFFFF;
+  --row-alt: #F7FAFC;
+  --elevated: #FFFFFF;
+  --border: #D9E3EC;
+  --border-strong: #7A8C9A;
+  --input-bg: #FFFFFF;
+  --text: #10202C;
+  --text-2: #4E6272;
+  --text-3: #62788A;
+  --primary: #0A6AA8;
+  --primary-hover: #08578A;
+  --primary-tint: rgba(10,106,168,0.08);
+  --primary-border: rgba(10,106,168,0.35);
+  --primary-ink: #08578A;
+  --on-primary: #FFFFFF;
+  --link: #0A6AA8;
+  --success: #1E7F4F;
+  --success-ink: #14603B;
+  --success-tint: rgba(30,127,79,0.10);
+  --success-border: rgba(30,127,79,0.35);
+  --error: #C2352F;
+  --error-ink: #A12A25;
+  --error-tint: rgba(194,53,47,0.08);
+  --error-border: rgba(194,53,47,0.35);
+  --warning: #A86400;
+  --warning-ink: #7F4B00;
+  --warning-tint: rgba(168,100,0,0.10);
+  --warning-border: rgba(168,100,0,0.35);
+  --info: #2D66C4;
+  --info-ink: #1F4F9E;
+  --info-tint: rgba(45,102,196,0.08);
+  --info-border: rgba(45,102,196,0.35);
+  --danger-solid: #C2352F;
+  --neutral-tint: rgba(16,32,44,0.04);
+  --toggle-off: #8799A8;
+  --card-shadow: 0 1px 0 rgba(16,32,44,0.04);
+  --elevated-shadow: 0 10px 28px rgba(7,43,68,0.14);
+  --grid: rgba(16,32,44,0.07);
+  --glow: #D6EEF9;
+  --glow-opacity: 0.6;
+  --rim: rgba(255,255,255,0.35);
+  --orb-hi: rgba(255,255,255,0.95);
+  --orb-mid: rgba(56,198,244,0.75);
+  --orb-lo: rgba(10,106,168,0.85);
+  --orb-edge: rgba(214,238,249,0.95);
+  --orb-shadow: rgba(10,106,168,0.28);
+  --chart-seq-1: #08578A;
+  --chart-seq-2: #3A93CC;
+  --chart-seq-3: #9CCDEA;
+
+  /* The staff desk: a deep column in the role's shade, in both themes, so the role's colour reads as the one strong thing. */
+  --sidebar: #072B44;
+  --sidebar-text: #EAF3F9;
+  --sidebar-text-2: #9FB6C8;
+  --sidebar-hover: rgba(255,255,255,0.07);
+  --sidebar-active: rgba(255,255,255,0.12);
+  --sidebar-rule: rgba(255,255,255,0.10);
+  --pool-1: rgba(56,198,244,0.30);
+  --pool-2: rgba(10,106,168,0.22);
+  --pool-3: rgba(255,138,61,0.20);
+  --pad: rgba(46,140,100,0.15);
+  --pad-edge: rgba(46,140,100,0.30);
+  --desk: #38C6F4;               /* the role's colour on the dark desk (set per role below) */
+}
+
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #0E0B1F;
-  --surface: #17142B;
-  --row-alt: #1A1730;
-  --elevated: #201C38;
-  --border: #2C2747;
-  --border-strong: #716B8C;
-  --sidebar: #0A0818;
-  --input-bg: #17142B;
-  --text: #F2F0F7;
-  --text-2: #A6A1BD;
-  --text-3: #6B6685;
-  --primary: #6D4AFF;
-  --primary-hover: #7E5FFF;
-  --primary-tint: rgba(109,74,255,0.12);
-  --primary-border: rgba(109,74,255,0.40);
-  --primary-ink: #C9BDFF;
-  --on-primary: #FFFFFF;
-  --link: #9C86FF;
+  --bg: #0A141C;
+  --surface: #0F1C27;
+  --row-alt: #13222E;
+  --elevated: #162836;
+  --border: #213646;
+  --border-strong: #6C8396;
+  --input-bg: #0F1C27;
+  --text: #EAF3F9;
+  --text-2: #A5BACA;
+  --text-3: #8399AA;
+  --primary: #4CC3F0;
+  --primary-hover: #6FD0F4;
+  --primary-tint: rgba(76,195,240,0.12);
+  --primary-border: rgba(76,195,240,0.40);
+  --primary-ink: #9EDFF7;
+  --on-primary: #04202F;
+  --link: #6FD0F4;
   --success: #2FB67C;
   --success-ink: #4FD39A;
   --success-tint: rgba(47,182,124,0.12);
@@ -40,84 +109,101 @@
   --info-border: rgba(76,141,246,0.40);
   --danger-solid: #CF3A3F;
   --neutral-tint: rgba(255,255,255,0.04);
-  --toggle-off: #6B6685;
+  --toggle-off: #6C8396;
   --card-shadow: none;
   --elevated-shadow: 0 12px 32px rgba(0,0,0,0.45);
   --grid: rgba(255,255,255,0.05);
-  --glow: #3B1E8F;
-  --glow-opacity: 0.22;
-  --rim: rgba(232,196,138,0.10);
+  --glow: #0D3A55;
+  --glow-opacity: 0.35;
+  --rim: rgba(255,255,255,0.12);
   --orb-hi: rgba(255,255,255,0.22);
-  --orb-mid: rgba(109,74,255,0.35);
-  --orb-lo: rgba(59,30,143,0.55);
-  --orb-edge: rgba(14,11,31,0.90);
-  --orb-shadow: rgba(59,30,143,0.45);
-  /* Chart steps for ordered values (P1 > P2 > P3): strongest first. Checked for colour-blind separation and
-     contrast on --surface; on dark the strongest step is the lightest. */
-  --chart-seq-1: #C9BDFF;
-  --chart-seq-2: #9C86FF;
-  --chart-seq-3: #6D4AFF;
+  --orb-mid: rgba(76,195,240,0.50);
+  --orb-lo: rgba(10,106,168,0.75);
+  --orb-edge: rgba(10,20,28,0.90);
+  --orb-shadow: rgba(10,106,168,0.45);
+  --chart-seq-1: #A9E2F8;
+  --chart-seq-2: #4CC3F0;
+  --chart-seq-3: #1E7DB8;
+  --sidebar: #051A29;
+  --pool-1: rgba(56,198,244,0.18);
+  --pool-2: rgba(10,106,168,0.22);
+  --pool-3: rgba(255,138,61,0.10);
+  --pad: rgba(70,170,120,0.10);
+  --pad-edge: rgba(70,170,120,0.28);
 }
 
-:root[data-theme="light"] {
-  color-scheme: light;
-  --bg: #F7F6FB;
-  --surface: #FFFFFF;
-  --row-alt: #FAF9FD;
-  --elevated: #FFFFFF;
-  --border: #E4E1EE;
-  --border-strong: #87819F;
-  --sidebar: #EFEDF6;
-  --input-bg: #FFFFFF;
-  --text: #17142B;
-  --text-2: #5E5878;
-  --text-3: #A6A1BD;
-  --primary: #5B36F2;
-  --primary-hover: #4A28D9;
-  --primary-tint: rgba(91,54,242,0.08);
-  --primary-border: rgba(91,54,242,0.35);
-  --primary-ink: #4A28D9;
-  --on-primary: #FFFFFF;
-  --link: #5B36F2;
-  --success: #1E8E5A;
-  --success-ink: #146B43;
-  --success-tint: rgba(30,142,90,0.10);
-  --success-border: rgba(30,142,90,0.35);
-  --error: #C9302C;
-  --error-ink: #B42824;
-  --error-tint: rgba(201,48,44,0.08);
-  --error-border: rgba(201,48,44,0.35);
-  --warning: #B26A00;
-  --warning-ink: #8A5200;
-  --warning-tint: rgba(178,106,0,0.10);
-  --warning-border: rgba(178,106,0,0.35);
-  --info: #2F6FD6;
-  --info-ink: #2459B3;
-  --info-tint: rgba(47,111,214,0.08);
-  --info-border: rgba(47,111,214,0.35);
-  --danger-solid: #C9302C;
-  --neutral-tint: rgba(23,20,43,0.04);
-  --toggle-off: #87819F;
-  --card-shadow: 0 1px 2px rgba(20,16,50,0.04), 0 4px 12px rgba(20,16,50,0.05);
-  --elevated-shadow: 0 8px 24px rgba(20,16,50,0.08);
-  --grid: rgba(23,20,43,0.07);
-  --glow: #E6DEFF;
-  --glow-opacity: 0.55;
-  --rim: rgba(245,230,200,0.35);
-  --orb-hi: rgba(255,255,255,0.95);
-  --orb-mid: rgba(193,178,255,0.60);
-  --orb-lo: rgba(140,116,240,0.45);
-  --orb-edge: rgba(230,222,255,0.90);
-  --orb-shadow: rgba(150,130,240,0.35);
-  --chart-seq-1: #5B36F2;
-  --chart-seq-2: #827FFB;
-  --chart-seq-3: #ABAEFF;
+/* One colour per desk. Fraud is night indigo: serious, and never confused with the red of an error. The manager's
+   room is the kingfisher's tangerine. The customer's app is lotus. Light and dark share the desk colour; actions follow it. */
+:root[data-role="fraud"] {
+  --desk: #9AA2FF;
+  --primary: #3B4BA3;
+  --primary-hover: #2E3C88;
+  --primary-tint: rgba(59,75,163,0.08);
+  --primary-border: rgba(59,75,163,0.35);
+  --primary-ink: #2E3C88;
+  --link: #3B4BA3;
+  --sidebar: #14163D;
+}
+
+:root[data-role="manager"] {
+  --desk: #FF8A3D;
+  --primary: #B4500F;
+  --primary-hover: #943F0A;
+  --primary-tint: rgba(180,80,15,0.08);
+  --primary-border: rgba(180,80,15,0.35);
+  --primary-ink: #943F0A;
+  --link: #B4500F;
+  --sidebar: #2A160B;
+}
+
+:root[data-role="customer"] {
+  --primary: #B83C63;
+  --primary-hover: #9A2F51;
+  --primary-tint: rgba(184,60,99,0.08);
+  --primary-border: rgba(184,60,99,0.32);
+  --primary-ink: #9A2F51;
+  --link: #B83C63;
+  --bg: #FAF7F8;
+}
+
+:root[data-theme="dark"][data-role="fraud"] {
+  --primary: #8C9BFF;
+  --primary-hover: #A6B2FF;
+  --primary-tint: rgba(140,155,255,0.12);
+  --primary-border: rgba(140,155,255,0.40);
+  --primary-ink: #B9C2FF;
+  --on-primary: #10163A;
+  --link: #A6B2FF;
+  --sidebar: #0D1030;
+}
+
+:root[data-theme="dark"][data-role="manager"] {
+  --primary: #FF9A55;
+  --primary-hover: #FFB07A;
+  --primary-tint: rgba(255,154,85,0.12);
+  --primary-border: rgba(255,154,85,0.40);
+  --primary-ink: #FFC39C;
+  --on-primary: #2A1205;
+  --link: #FFB07A;
+  --sidebar: #1A0D06;
+}
+
+:root[data-theme="dark"][data-role="customer"] {
+  --primary: #EC7A9C;
+  --primary-hover: #F294B0;
+  --primary-tint: rgba(236,122,156,0.12);
+  --primary-border: rgba(236,122,156,0.40);
+  --primary-ink: #F5AFC4;
+  --on-primary: #2E0A16;
+  --link: #F294B0;
+  --bg: #120D0F;
 }
 
 :root {
-  --radius: 8px;
-  --radius-card: 12px;
-  --font: 'Inter', 'IBM Plex Sans', system-ui, sans-serif;
+  --radius: 6px;
+  --radius-card: 10px;
+  --font: 'Public Sans', system-ui, sans-serif;
+  --font-display: 'Bricolage Grotesque', 'Public Sans', system-ui, sans-serif;
   --font-mono: ui-monospace, 'Cascadia Code', 'SF Mono', Consolas, monospace;
   --space-1: 4px;
   --space-2: 8px;
@@ -131,5 +217,5 @@
   --text-md: 14px;
   --text-lg: 16px;
   --text-xl: 20px;
-  --text-display: 32px;
+  --text-display: 34px;
 }

@@ -2,6 +2,9 @@ import * as RadixTabs from '@radix-ui/react-tabs';
 import { useState } from 'react';
 import { Navigate } from 'react-router';
 
+import { OrbMark } from '@/app/layout/OrbMark';
+import BlurText from '@/components/reactbits/BlurText';
+import { PondRipples } from '@/app/layout/PondRipples';
 import { homePath } from '@/app/navigation';
 import { FlashOutlet } from '@/app/providers/FlashProvider';
 import { ThemeSwitch } from '@/app/providers/ThemeSwitch';
@@ -19,16 +22,18 @@ export function SignInPage() {
   return (
     <div className={styles.page}>
       <div className={styles.glow} aria-hidden />
+      <PondRipples variant="hero" />
       <div className={styles.topBar}>
         <ThemeSwitch />
       </div>
       <main className={styles.panel}>
-        <div className={styles.orb} aria-hidden />
+        <OrbMark size={112} className={styles.mark} />
         <p className={styles.brand}>
-          <span className={styles.dot} aria-hidden />
           Teratai Bank
         </p>
-        <h1 className={styles.title}>Complaints Ops</h1>
+        <h1 className={styles.title}>
+          <BlurText text="Complaints Ops" animateBy="words" direction="top" trigger="load" className={styles.titleText} />
+        </h1>
         <p className={styles.subtitle}>Sign in to work your queue, or to follow your complaints</p>
         <FlashOutlet />
         <RadixTabs.Root value={tab} onValueChange={setTab}>

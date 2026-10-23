@@ -1,0 +1,118 @@
+.pond {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.ambientPond {
+  position: fixed;
+}
+
+/* Under the surface: three soft pools of pond colour drifting slowly. */
+.pool {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(70px);
+  animation: drift var(--drift, 38s) ease-in-out infinite alternate;
+}
+
+.poolA {
+  width: 46vw;
+  height: 46vw;
+  left: -10vw;
+  top: -12vw;
+  background: var(--pool-1);
+}
+
+.poolB {
+  --drift: 46s;
+  width: 40vw;
+  height: 40vw;
+  right: -8vw;
+  bottom: -14vw;
+  background: var(--pool-2);
+  animation-delay: -12s;
+}
+
+.poolC {
+  --drift: 52s;
+  width: 22vw;
+  height: 22vw;
+  left: 58%;
+  top: 30%;
+  background: var(--pool-3);
+  animation-delay: -24s;
+}
+
+@keyframes drift {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(4vw, 3vh) scale(1.08);
+  }
+  100% {
+    transform: translate(-3vw, 5vh) scale(0.96);
+  }
+}
+
+/* The moving surface sits over the pools. */
+.surface {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+}
+
+/* Inside the app the pools stay at the right edge and fainter, behind the work. */
+.ambientPond .pool {
+  opacity: 0.45;
+}
+
+.ambientPond .poolA {
+  left: auto;
+  right: -18vw;
+  top: -16vw;
+}
+
+.ambientPond .poolC {
+  display: none;
+}
+
+/* On the surface: lily pads, each bobbing and turning a little on its own slow clock. */
+.pad {
+  position: absolute;
+  z-index: 2;
+  margin: -50px 0 0 -50px;
+  animation: bob var(--bob) ease-in-out infinite alternate;
+}
+
+.padShape {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform: rotate(var(--turn));
+}
+
+@keyframes bob {
+  0% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  100% {
+    transform: translate(10px, -8px) rotate(9deg);
+  }
+}
+
+.ambientPond .pad {
+  opacity: 0.7;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pad,
+  .pool {
+    animation: none !important;
+  }
+}

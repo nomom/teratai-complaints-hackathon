@@ -33,12 +33,9 @@
   text-align: center;
 }
 
-.orb {
-  width: 112px;
-  height: 112px;
+.mark.mark {
+  display: block;
   margin: 0 auto var(--space-5);
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, var(--orb-hi), var(--orb-mid) 38%, var(--orb-lo) 70%, var(--orb-edge));
   box-shadow: 0 0 80px 10px var(--orb-shadow), inset -10px -14px 30px var(--orb-edge), inset 6px 6px 18px var(--rim);
 }
 
@@ -116,4 +113,10 @@
   .panel {
     margin-top: var(--space-8);
   }
+}
+
+/* React Bits BlurText lays the words out as a flex row: keep them centred under the orb. */
+.titleText {
+  justify-content: center;
+  column-gap: 0;
 }

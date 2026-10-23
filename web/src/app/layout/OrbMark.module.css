@@ -1,0 +1,7 @@
+.orb {
+  display: inline-block;
+  flex: none;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, var(--orb-hi), var(--orb-mid) 38%, var(--orb-lo) 70%, var(--orb-edge));
+  box-shadow: inset -2px -3px 6px var(--orb-edge);
+}

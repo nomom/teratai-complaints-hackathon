@@ -30,6 +30,23 @@ p {
   margin: 0;
 }
 
+h1,
+h2 {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  letter-spacing: -0.01em;
+}
+
+h1 {
+  font-weight: 700;
+}
+
+table,
+td,
+th {
+  font-variant-numeric: tabular-nums;
+}
+
 a {
   color: var(--link);
 }
@@ -67,5 +84,19 @@ code {
   *::after {
     transition: none !important;
     animation: none !important;
+  }
+}
+
+/* Phones: body text at 16px (UI/UX Pro Max: readable font size on mobile). */
+@media (max-width: 640px) {
+  html,
+  body {
+    font-size: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
   }
 }
