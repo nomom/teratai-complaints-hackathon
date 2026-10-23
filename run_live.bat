@@ -1,5 +1,5 @@
 @echo off
-rem Teratai complaints agent: start the live-round system on the venue Wi-Fi (see VENUE_RUNBOOK.md).
+rem Teratai complaints agent: start the live-round system on the venue Wi-Fi (see docs/team/VENUE_RUNBOOK.md).
 rem Like run.bat, but: a fresh case store (runtime\live.db, no backfill of the 2,500 training complaints), and the API
 rem listens on all interfaces so the organisers can reach it on the same Wi-Fi at http://<this laptop's IP>:8000.
 rem Run run.bat once first if the packages aren't installed yet. Close the three windows to stop.

@@ -1,4 +1,4 @@
-"""Model evaluation on newly written, live-round-style complaints (eval/live_round.csv). See MODEL_EVAL.md.
+"""Model evaluation on newly written, live-round-style complaints (eval/live_round.csv). See docs/team/MODEL_EVAL.md.
 
     python -m scripts.eval_live --price-in 0.20 --price-out 1.20     (USD per 1M tokens, from the provider's page)
 

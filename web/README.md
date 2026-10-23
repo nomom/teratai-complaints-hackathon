@@ -4,7 +4,7 @@ The React app staff and customers use. It is a client of the FastAPI app (`app/a
 
 ## Run it
 
-Needs Node.js 20.19 or newer, and the Python side running (see the repo's [TEAM.md](../TEAM.md)):
+Needs Node.js 20.19 or newer, and the Python side running (see the repo's [TEAM.md](../docs/team/TEAM.md)):
 
 ```powershell
 uv run python -m app.worker                          # terminal 1, repo root

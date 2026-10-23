@@ -51,9 +51,9 @@ uv run python scoring/api_check.py http://localhost:8000          # test the API
 ```
 
 `run.bat` (Windows) or `run.sh` starts all three; it starts the API without `--host 0.0.0.0`, which is fine behind a tunnel (see [VENUE_RUNBOOK.md](VENUE_RUNBOOK.md)). 
-The dashboard calls the API through `/api`, which the Vite dev server forwards to port 8000, so there is nothing to configure. See [web/README.md](web/README.md) for its structure, tests and build.
+The dashboard calls the API through `/api`, which the Vite dev server forwards to port 8000, so there is nothing to configure. See [web/README.md](../../web/README.md) for its structure, tests and build.
 
-**The live round runs through our API** ([docs/api.md](docs/api.md)). `POST /complaints`, `GET /cases/{id}`, `POST /cases/{id}/actions` and `GET /health` need no login (the organisers' calls carry no credentials); everything else needs a login, and the same `GET /cases/{id}` gives a signed-in user the full case instead of the contract view. The organisers' laptop must reach it from 15:00 until our demo ends: listen on all interfaces (`--host 0.0.0.0`) and give them `http://<laptop-ip>:8000` (allow it through the Windows firewall), or use a tunnel (ngrok, Cloudflare Tunnel). `WORKERS` (default 16) sets how many complaints the worker handles at once; `MAX_BACKLOG` (default 200) is how many may wait before `POST /complaints` answers `503` + `Retry-After` (load test and numbers: `scripts/load_test.py`, [VENUE_RUNBOOK.md](VENUE_RUNBOOK.md) 2b); `BACKFILL=0` skips loading `data/complaints.csv` (clean demo or test database, with `CASE_DB=runtime/demo.db`).
+**The live round runs through our API** ([docs/api.md](../api.md)). `POST /complaints`, `GET /cases/{id}`, `POST /cases/{id}/actions` and `GET /health` need no login (the organisers' calls carry no credentials); everything else needs a login, and the same `GET /cases/{id}` gives a signed-in user the full case instead of the contract view. The organisers' laptop must reach it from 15:00 until our demo ends: listen on all interfaces (`--host 0.0.0.0`) and give them `http://<laptop-ip>:8000` (allow it through the Windows firewall), or use a tunnel (ngrok, Cloudflare Tunnel). `WORKERS` (default 16) sets how many complaints the worker handles at once; `MAX_BACKLOG` (default 200) is how many may wait before `POST /complaints` answers `503` + `Retry-After` (load test and numbers: `scripts/load_test.py`, [VENUE_RUNBOOK.md](VENUE_RUNBOOK.md) 2b); `BACKFILL=0` skips loading `data/complaints.csv` (clean demo or test database, with `CASE_DB=runtime/demo.db`).
 
 On start the worker also loads every complaint in `data/complaints.csv` that isn't in the case store yet (about 15 s for all 2,500, in the background, rules only; `BACKFILL_LLM=1` uses the LLM too). Cases already stored are never reprocessed, so a restart keeps officers' actions. To start over, delete `runtime/cases.db`.
 
@@ -154,14 +154,14 @@ Goal: the live round works without a hitch; test predictions in early.
 - [x] *(done by B, please review)* Case page rebuilt around `agent/summary.py`: why it is in this queue, what happened, the decision, the one transaction that proves it, then the reply and buttons. Full evidence (customer, account, fee schedule row, journal, dates, policy settings), how the agent decided (reasons, what it read, reply source and rejected drafts, steps, cost) and the audit log are collapsed below. `GET /cases/{id}` returns the same `summary` for a React app
 - [x] *(done by B, please review)* **Resolved automatically** page (read-only spot-check of replies no person approved, with a "flagged only" toggle); **All cases** filter by status or "flagged for review", click a row to open it; **Flag for review** on any sent case (audit entry `flagged_for_review`, changes nothing; API `POST /cases/{id}/flag`). `GET /cases?status=` takes several statuses, comma-separated
 - [x] React frontend in `web/` replaces the Streamlit dashboard (see "Frontend" below)
-- [x] *(done by B, please review)* **Live-round API** to the contract in [docs/api.md](docs/api.md): no-login `POST /complaints` (validation 422, duplicates return the existing case, unknown customer 422), `GET /cases/{id}` (processing / done with `self_check`, `case_state`, `sent`, `human_action`), `POST /cases/{id}/actions` (approve / reject / edit_approve, edited replies self-checked), `GET /health`; the worker handles 8 complaints at once and never reprocesses a stored case. `scoring/api_check.py` with 20 training complaints at once, LLM on: **score 100.0, 20/20 states, 9/9 probes, slowest 22.9 s** (limit 120 s). Tests in `tests/test_api_contract.py`
+- [x] *(done by B, please review)* **Live-round API** to the contract in [docs/api.md](../api.md): no-login `POST /complaints` (validation 422, duplicates return the existing case, unknown customer 422), `GET /cases/{id}` (processing / done with `self_check`, `case_state`, `sent`, `human_action`), `POST /cases/{id}/actions` (approve / reject / edit_approve, edited replies self-checked), `GET /health`; the worker handles 8 complaints at once and never reprocesses a stored case. `scoring/api_check.py` with 20 training complaints at once, LLM on: **score 100.0, 20/20 states, 9/9 probes, slowest 22.9 s** (limit 120 s). Tests in `tests/test_api_contract.py`
 - [ ] **Make the API reachable** from another laptop on the venue Wi-Fi (`--host 0.0.0.0`, firewall, laptop IP) or through a tunnel; test it from a teammate's laptop before Checkpoint 2
 - [ ] Optional: the dashboard's Approve / Reject could call `POST /cases/{id}/actions` (same rules as now: both go through `store.approve` / `store.reject`)
 - [ ] Live-round test set: ~10 tricky complaints written fresh **as CSV rows in that format** (Malay, mixed, call-centre note, 65+, > RM500, scam, ambiguous). Rehearse feeding them in
 - [ ] Test predictions early: `run_batch --split test --team <team-name>`, then a PR from our fork to the original repo titled `Submission: <team-name>`, well before 15:00 Day 2. Re-run as A and B improve
 
 #### Optional: the "Best Ops Platform" award (only once the core works)
-A separate award, see [docs/bonus_platform.md](docs/bonus_platform.md) and the summary in [END_GOAL.md](END_GOAL.md). In order:
+A separate award, see [docs/bonus_platform.md](../bonus_platform.md) and the summary in [END_GOAL.md](END_GOAL.md). In order:
 
 - [ ] **Never overwrite the agent's decision.** `store.approve` currently replaces `reply_text` with the officer's edit. Keep the agent's fields as they were and store what staff did (`final_action`, final reply) separately. The `predictions.csv` export must stay the agent's output
 - [x] **Self-check on edited replies** (done, see above)
@@ -179,7 +179,7 @@ A separate award, see [docs/bonus_platform.md](docs/bonus_platform.md) and the s
 
 ## Frontend: React (`web/`)
 
-The dashboard is a React + TypeScript app (Vite) in `web/`, and it is only a client of `app/api.py`: the agent, worker and store don't depend on it, so A and B aren't affected by UI work. Structure, scripts and tests: [web/README.md](web/README.md).
+The dashboard is a React + TypeScript app (Vite) in `web/`, and it is only a client of `app/api.py`: the agent, worker and store don't depend on it, so A and B aren't affected by UI work. Structure, scripts and tests: [web/README.md](../../web/README.md).
 
 Every request carries the signed-in user's token (`Authorization: Bearer ...` from `POST /auth/login`), and the API applies the role rules, so the UI hiding a page is never the only guard.
 
@@ -193,7 +193,7 @@ Every request carries the signed-in user's token (`Authorization: Bearer ...` fr
 | Approve / reject / flag | `POST /cases/{id}/approve` `{reply_text?}` (`422` with `detail.problems` when the reply fails the self-check; nothing is sent), `/reject`, `/flag` `{note}`. The actor is the signed-in user |
 | Staff intake | `POST /complaints` → `{complaint_id}` (signed in, `complaint_id` may be empty: one is made up), then poll `GET /cases/{id}` until it returns 200 |
 | Customer files / answers | `POST /me/complaints` `{text, subject}` (under their own ID) / `POST /cases/{id}/messages` `{text}` |
-| **Live-round contract, no login** ([docs/api.md](docs/api.md)) | `POST /complaints` (all six fields) → `202 processing`; `GET /cases/{id}` without a token → `status`, decision, `self_check`, `case_state`, `sent`, `human_action`; `POST /cases/{id}/actions` `{action, actor, reason, reply_text?}`; `GET /health` |
+| **Live-round contract, no login** ([docs/api.md](../api.md)) | `POST /complaints` (all six fields) → `202 processing`; `GET /cases/{id}` without a token → `status`, decision, `self_check`, `case_state`, `sent`, `human_action`; `POST /cases/{id}/actions` `{action, actor, reason, reply_text?}`; `GET /health` |
 
 Statuses: open `AWAITING_CUSTOMER`, `PENDING_APPROVAL`, `FRAUD_QUEUE`; closed `RESOLVED`, `APPROVED`, `REJECTED`, `ANSWERED` (see `agent/schemas.py`). An `AWAITING_CUSTOMER` case has no decision yet: `outcome`, `route`, `matched_txn_id` and `refund_amount_myr` are `null`, so show "-".
 

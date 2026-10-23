@@ -25,7 +25,7 @@ falling back to the rules, not as wrong refunds.
 - **Train 200 score:** the official scorer (`scoring/score.py`) on 200 training complaints (fixed sample). Rules alone also
   score 100 here, because they are tuned to the training wording: this column catches a model that makes things *worse*.
 - **New wording (200):** complaints written for this evaluation in wording the rules have never seen
-  ([eval/live_round.csv](eval/live_round.csv)), each on a real transaction with its expected intent, category and
+  ([eval/live_round.csv](../../eval/live_round.csv)), each on a real transaction with its expected intent, category and
   transaction. This is the column that shows what the LLM adds, and what the live round tests. See
   [The new-wording set](#the-new-wording-set-200-cases) below.
 - **New wording (14):** the first 14 cases of that set (LIVE-01 to LIVE-14), the only ones the earlier models were run
@@ -42,7 +42,7 @@ falling back to the rules, not as wrong refunds.
 
 ## The new-wording set (200 cases)
 
-[eval/live_round.csv](eval/live_round.csv), run with `scripts.eval_live`. Built 2026-10-23 from the original 14 cases.
+[eval/live_round.csv](../../eval/live_round.csv), run with `scripts.eval_live`. Built 2026-10-23 from the original 14 cases.
 
 **How it was built**
 - Every complaint is about a real transaction in `data/` (customers not otherwise in the set, transactions not in the

@@ -1,8 +1,8 @@
 # How a complaint flows through the agent
 
-Every complaint goes through one function, [`process_complaint()`](agent/pipeline.py). The live app, the inbox worker
+Every complaint goes through one function, [`process_complaint()`](../../agent/pipeline.py). The live app, the inbox worker
 and the batch run all call it. There is no agent framework (no LangGraph or LangChain): the flow is plain Python, and
-all LLM traffic goes through [`agent/llm.py`](agent/llm.py) using the `anthropic` or `openai` SDK.
+all LLM traffic goes through [`agent/llm.py`](../../agent/llm.py) using the `anthropic` or `openai` SDK.
 
 **The LLM reads and writes; code decides.** The LLM classifies the message, pulls out the clues and drafts the reply.
 Code finds the transaction, decides the refund, checks the reply and picks the queue. The LLM never chooses the
@@ -194,27 +194,27 @@ Only `llm.py` talks to an LLM, and only `data/tools.py` reads the bank's data. E
 
 | File | Its job in one line |
 | --- | --- |
-| [`app/api.py`](app/api.py) | HTTP endpoints: takes complaints in, serves cases, records approve and reject |
-| [`app/worker.py`](app/worker.py) | Watches `inbox/`, runs the agent on each file, backfills `data/complaints.csv` on start |
-| [`app/store.py`](app/store.py) | The SQLite database: the cases table, the audit log, approve, reject and holding reply |
-| [`app/contract.py`](app/contract.py) | The organisers' view of a case: decision fields only, no personal data |
-| [`app/UserAccessControl/`](app/UserAccessControl/) | Login, tokens and the four roles |
-| [`app/dashboard.py`](app/dashboard.py) | The numbers behind the staff dashboard charts |
-| [`agent/pipeline.py`](agent/pipeline.py) | `process_complaint()`: runs the steps in order and builds the case record |
-| [`agent/extract.py`](agent/extract.py) | UNDERSTAND: reads the message with the LLM, or with keyword rules |
-| [`agent/crosscheck.py`](agent/crosscheck.py) | A second look when the LLM and the keyword rules disagree on the category |
-| [`agent/decision/matching.py`](agent/decision/matching.py) | FIND: scores the customer's transactions against the clues |
-| [`agent/decision/dates.py`](agent/decision/dates.py) | Turns "last Tuesday" into a date range |
-| [`agent/decision/policy.py`](agent/decision/policy.py) | DECIDE and ROUTE: refund rules, priority and queue |
-| [`agent/reply.py`](agent/reply.py) | DRAFT: an LLM reply, or a fixed template |
-| [`agent/checks.py`](agent/checks.py) | CHECK: tests the reply against the data |
-| [`agent/llm.py`](agent/llm.py) | The only file that calls an LLM: providers, budgets, errors |
-| [`agent/data/tools.py`](agent/data/tools.py) | Every lookup into the bank's data: transactions, reversals, fees, ATM journal |
-| [`agent/schemas.py`](agent/schemas.py) | The shapes of the data passed between the steps |
-| [`agent/summary.py`](agent/summary.py) | The at-a-glance summary staff see on a case |
-| [`starter/data.py`](starter/data.py) | Loads the CSVs in `data/` into memory, once per process |
-| [`scripts/run_batch.py`](scripts/run_batch.py) | Runs the pipeline over many complaints and writes `predictions.csv` |
-| [`web/`](web/) | The React app: staff queues, dashboard and customer portal |
+| [`app/api.py`](../../app/api.py) | HTTP endpoints: takes complaints in, serves cases, records approve and reject |
+| [`app/worker.py`](../../app/worker.py) | Watches `inbox/`, runs the agent on each file, backfills `data/complaints.csv` on start |
+| [`app/store.py`](../../app/store.py) | The SQLite database: the cases table, the audit log, approve, reject and holding reply |
+| [`app/contract.py`](../../app/contract.py) | The organisers' view of a case: decision fields only, no personal data |
+| [`app/UserAccessControl/`](../../app/UserAccessControl) | Login, tokens and the four roles |
+| [`app/dashboard.py`](../../app/dashboard.py) | The numbers behind the staff dashboard charts |
+| [`agent/pipeline.py`](../../agent/pipeline.py) | `process_complaint()`: runs the steps in order and builds the case record |
+| [`agent/extract.py`](../../agent/extract.py) | UNDERSTAND: reads the message with the LLM, or with keyword rules |
+| [`agent/crosscheck.py`](../../agent/crosscheck.py) | A second look when the LLM and the keyword rules disagree on the category |
+| [`agent/decision/matching.py`](../../agent/decision/matching.py) | FIND: scores the customer's transactions against the clues |
+| [`agent/decision/dates.py`](../../agent/decision/dates.py) | Turns "last Tuesday" into a date range |
+| [`agent/decision/policy.py`](../../agent/decision/policy.py) | DECIDE and ROUTE: refund rules, priority and queue |
+| [`agent/reply.py`](../../agent/reply.py) | DRAFT: an LLM reply, or a fixed template |
+| [`agent/checks.py`](../../agent/checks.py) | CHECK: tests the reply against the data |
+| [`agent/llm.py`](../../agent/llm.py) | The only file that calls an LLM: providers, budgets, errors |
+| [`agent/data/tools.py`](../../agent/data/tools.py) | Every lookup into the bank's data: transactions, reversals, fees, ATM journal |
+| [`agent/schemas.py`](../../agent/schemas.py) | The shapes of the data passed between the steps |
+| [`agent/summary.py`](../../agent/summary.py) | The at-a-glance summary staff see on a case |
+| [`starter/data.py`](../../starter/data.py) | Loads the CSVs in `data/` into memory, once per process |
+| [`scripts/run_batch.py`](../../scripts/run_batch.py) | Runs the pipeline over many complaints and writes `predictions.csv` |
+| [`web/`](../../web) | The React app: staff queues, dashboard and customer portal |
 
 `agent/policy.py`, `agent/matching.py`, `agent/dates.py` and `agent/tools.py` are one-line aliases left behind when
 those files moved into `agent/decision/` and `agent/data/`.
@@ -257,7 +257,7 @@ sequenceDiagram
     P->>P: build the CaseRecord: status, SLA due time, trace, llm_usage
 ```
 
-The data handed from step to step ([`agent/schemas.py`](agent/schemas.py)):
+The data handed from step to step ([`agent/schemas.py`](../../agent/schemas.py)):
 
 | Object | Made by | What it holds |
 | --- | --- | --- |
@@ -386,7 +386,7 @@ or personal data such as the customer's age, so it cannot repeat them.
 
 ## 8. ROUTE: which queue a case lands in
 
-[`policy.route()`](agent/decision/policy.py) is a few lines of code, checked in this order:
+[`policy.route()`](../../agent/decision/policy.py) is a few lines of code, checked in this order:
 
 ```mermaid
 flowchart TD
@@ -418,13 +418,13 @@ Two cases skip `route()` entirely: `OUT_OF_SCOPE` messages end as `ANSWERED`, an
 | Reply draft | `reply.draft_*()` | Every complaint |
 | Redraft | `reply.draft_*()` with feedback | Only when the first draft fails the check |
 
-That's 2 calls normally and 4 at most. [`llm.Usage`](agent/llm.py) caps each complaint at
+That's 2 calls normally and 4 at most. [`llm.Usage`](../../agent/llm.py) caps each complaint at
 `LLM_MAX_CALLS_PER_COMPLAINT` (default 6) and `LLM_MAX_TOKENS_PER_COMPLAINT` (default 40,000). Calls, tokens and any
 failure kinds are saved in the case record (`llm_usage`), and each step's timing is saved in `trace`.
 
 ## 10. After the pipeline: a case's life in the queues
 
-The pipeline gives each case a status. From there, people move it on through [`app/store.py`](app/store.py):
+The pipeline gives each case a status. From there, people move it on through [`app/store.py`](../../app/store.py):
 
 ```mermaid
 stateDiagram-v2
@@ -462,7 +462,7 @@ stateDiagram-v2
 
 ## 11. Who sees what
 
-[`roles.py`](app/UserAccessControl/roles.py) holds the rules in one place, and every endpoint applies them.
+[`roles.py`](../../app/UserAccessControl/roles.py) holds the rules in one place, and every endpoint applies them.
 
 ```mermaid
 flowchart LR

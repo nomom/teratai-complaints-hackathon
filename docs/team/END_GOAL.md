@@ -8,7 +8,7 @@ What we hand in at 15:00 on Day 2 (the agent and API freeze), and what the judge
 
 ## 1. A working app
 
-It runs on a laptop as three processes: `python -m app.worker`, the API (`uvicorn app.api:app --host 0.0.0.0 --port 8000`) and the React dashboard in `web/` (`run.bat` starts all three). Officers use the dashboard. **The live round talks to the API** ([docs/api.md](docs/api.md)): the organisers' script and the judges POST complaints to it with no login, read the decision back, and approve through it.
+It runs on a laptop as three processes: `python -m app.worker`, the API (`uvicorn app.api:app --host 0.0.0.0 --port 8000`) and the React dashboard in `web/` (`run.bat` starts all three). Officers use the dashboard. **The live round talks to the API** ([docs/api.md](../api.md)): the organisers' script and the judges POST complaints to it with no login, read the decision back, and approve through it.
 
 | Screen | What it does |
 |---|---|
@@ -56,7 +56,7 @@ A case's status says where it is, separately from what was decided.
 
 ### What it looks like in the live round
 
-Two parts, both through our API (README, "The live round"; [docs/api.md](docs/api.md)):
+Two parts, both through our API (README, "The live round"; [docs/api.md](../api.md)):
 
 - **Hidden test (15 points, 15:00–15:45):** the organisers' `scoring/api_check.py` sends **20 unseen, messily written complaints** (typos, SMS short forms, emoji, mixed English and Malay) all at once, scores them like the leaderboard, and runs probes (health, unknown case, missing text, unknown customer, a duplicate, approval holding, an edited reply with an invented amount refused). 120 s allowed per complaint. Our own run of the same script: **100.0, 20/20 states, 9/9 probes, slowest 22.9 s**.
 - **Human gate (10 points, in the demo):** judges send 3 complaints one at a time; we show each appear on its own in the dashboard with the matched transaction, evidence, decision, route, reply and self-check; an approval case waits until we approve it (the API shows `case_state: awaiting_approval`, `sent: false` until then), and a fraud case lands in the fraud queue.
@@ -130,7 +130,7 @@ Why: the ATM journal shows RM1,500 requested and RM950 dispensed. The refund is 
 
 ## Optional: the "Best Ops Platform" award
 
-A separate award ([docs/bonus_platform.md](docs/bonus_platform.md)); it doesn't affect the ranking or the leaderboard. Only after the core agent works. It turns the case store into a back office:
+A separate award ([docs/bonus_platform.md](../bonus_platform.md)); it doesn't affect the ranking or the leaderboard. Only after the core agent works. It turns the case store into a back office:
 
 - **Roles:** complaints officers see only the approval queue, fraud analysts only the fraud queue, and a manager sees both plus escalations. Seeded users with a `role` are enough
 - **Two-tier approval:** officers and analysts clear cases up to their approval limit; anything over it, or sensitive, waits for the manager

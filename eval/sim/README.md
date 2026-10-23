@@ -12,7 +12,7 @@ A rehearsal of the organisers' hidden test, built from the 14 hand-written compl
 **Run it like the organisers** (from any laptop on the same Wi-Fi; Python 3, standard library only, from the repo root):
 
 ```powershell
-python scoring/api_check.py http://10.0.30.141:8000 --complaints eval/sim/sim_complaints.csv --labels eval/sim/sim_labels.csv --all --out sim.json
+python scoring/api_check.py http://10.0.30.141:8000 --complaints eval/sim/sim_complaints.csv --labels eval/sim/sim_labels.csv --all --out eval/sim/result.json
 ```
 
 Expect SCORE 100.0, 11/11 states and 9/9 probes. **Each id is decided once:** a second run returns the stored cases

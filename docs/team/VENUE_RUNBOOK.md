@@ -1,8 +1,8 @@
 # Venue runbook (Day 2, 2026-10-23)
 
 Everything to set up and test at the venue so the organisers can reach our API, written the night before
-(2026-10-22, 23:00) so no context is lost. Requirements: [README](README.md) "The live round", [docs/api.md](docs/api.md),
-[docs/scoring.md](docs/scoring.md). Team plan: [TEAM.md](TEAM.md), [END_GOAL.md](END_GOAL.md).
+(2026-10-22, 23:00) so no context is lost. Requirements: [README](../../README.md) "The live round", [docs/api.md](../api.md),
+[docs/scoring.md](../scoring.md). Team plan: [TEAM.md](TEAM.md), [END_GOAL.md](END_GOAL.md).
 
 **Day 2 timeline**
 
@@ -129,7 +129,7 @@ Risks: many venues block laptops from reaching each other, and the IP can change
 
 ## 7. Demo (16:30)
 
-**Rehearse the human gate first:** [`eval/human_gate/README.md`](eval/human_gate/README.md), 10 steps, a teammate on another laptop as the judge. The dashboard queues reload every 5 s, so a judge's complaint appears without a click.
+**Rehearse the human gate first:** [`eval/human_gate/README.md`](../../eval/human_gate/README.md), 10 steps, a teammate on another laptop as the judge. The dashboard queues reload every 5 s, so a judge's complaint appears without a click.
 
 Human gate checklist per complaint: the case appears on its own; right transaction, decision and refund; right route;
 an approval case waits until we approve it (`case_state: awaiting_approval`, `sent: false`); a fraud case lands in the
