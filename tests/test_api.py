@@ -106,6 +106,38 @@ class Api(unittest.TestCase):
         self.assertEqual(self.client.post("/me/complaints", headers=self.headers("officer1"),
                                           json={"text": "x"}).status_code, 403)
 
+    def test_customer_reads_their_own_profile(self):
+        me = self.client.get("/me/profile", headers=self.customer("CUS-00001")).json()
+        self.assertEqual((me["customer_id"], me["full_name"], me["city"], me["preferred_language"]),
+                         ("CUS-00001", "Chan Zhi Hao", "Petaling Jaya", "EN"))
+        self.assertEqual([(a["account_id"], a["product"], a["card_last4"]) for a in me["accounts"]],
+                         [("ACC-000001", "Savings Plus", "2462"), ("ACC-000002", "Credit Card Classic", "1882")])
+
+    def test_customer_reads_their_own_transactions(self):
+        body = self.client.get("/me/transactions", headers=self.customer("CUS-00001")).json()
+        rows = body["transactions"]
+        self.assertEqual((body["as_of"], body["report_window_days"]), ("2026-09-30 18:00", 45))
+        self.assertEqual(len(rows), len(tools.get_db().txns_by_customer["CUS-00001"]))
+        self.assertEqual([r["txn_time"] for r in rows], sorted((r["txn_time"] for r in rows), reverse=True))
+        self.assertTrue(all(r["txn_id"] in {t["txn_id"] for t in tools.get_db().txns_by_customer["CUS-00001"]}
+                            for r in rows))
+        by_id = {r["txn_id"]: r for r in rows}
+        self.assertEqual(by_id["TXN-0119292"]["amount_myr"], 90.90)
+        for field in ("auth_method", "counterparty_account", "customer_id", "time", "amount"):
+            self.assertNotIn(field, rows[0])                    # statement fields only, nothing internal
+        # reportable = within the 45 days before the app's date, 2026-09-30 18:00
+        self.assertEqual({t: by_id[t]["reportable"] for t in ("TXN-0113570", "TXN-0115590", "TXN-0152536",
+                                                               "TXN-0153369")},
+                         {"TXN-0113570": False, "TXN-0115590": True, "TXN-0152536": True, "TXN-0153369": False})
+
+    def test_own_records_are_for_customers_only(self):
+        for path in ("/me/profile", "/me/transactions"):
+            self.assertEqual(self.client.get(path).status_code, 401)
+            self.assertEqual(self.client.get(path, headers=self.headers("manager1")).status_code, 403)
+            self.assertEqual(self.client.get(path, headers=self.headers("officer1")).status_code, 403)
+        other = self.client.get("/me/transactions", headers=self.customer("CUS-00150")).json()["transactions"]
+        self.assertNotIn("TXN-0119292", {r["txn_id"] for r in other})     # CUS-00001's charge, not theirs
+
 
 if __name__ == "__main__":
     unittest.main()

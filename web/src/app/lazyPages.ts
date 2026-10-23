@@ -15,3 +15,9 @@ export const MyCasesPage = lazy(() =>
 
 export const NewComplaintPage = lazy(() =>
   import('@/features/customer/pages/NewComplaintPage').then((m) => ({ default: m.NewComplaintPage })));
+
+export const ProfilePage = lazy(() =>
+  import('@/features/customer/pages/ProfilePage').then((m) => ({ default: m.ProfilePage })));
+
+export const TransactionsPage = lazy(() =>
+  import('@/features/customer/pages/TransactionsPage').then((m) => ({ default: m.TransactionsPage })));

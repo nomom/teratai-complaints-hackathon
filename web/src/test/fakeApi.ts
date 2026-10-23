@@ -6,6 +6,7 @@
 import { vi } from 'vitest';
 
 import type { CaseDetail, CaseRow, CaseStatus } from '@/features/cases/types';
+import type { Profile, Statement, Transaction } from '@/features/customer/types';
 
 type Role = 'officer' | 'fraud' | 'manager' | 'customer';
 interface Account { password: string; role: Role; full_name: string }
@@ -47,6 +48,38 @@ export function seedCases(): CaseDetail[] {
 }
 
 const HUMAN: Record<string, string> = { officer: 'HUMAN_APPROVAL', fraud: 'FRAUD_TEAM' };
+
+/** GET /me/profile for any signed-in customer: their own ID and name, the same two accounts. */
+const profileOf = (customerId: string, fullName: string): Profile => ({
+  customer_id: customerId, full_name: fullName, date_of_birth: '1990-05-14', state: 'Selangor', city: 'Shah Alam',
+  segment: 'Retail', preferred_language: 'EN', email: 'customer@example.com', customer_since: '2015-03-02',
+  accounts: [
+    { account_id: 'ACC-000300', product: 'Savings Plus', open_date: '2015-03-02', status: 'Active', card_last4: '4821' },
+    { account_id: 'ACC-000301', product: 'Credit Card Classic', open_date: '2023-01-19', status: 'Active', card_last4: '1907' },
+  ],
+});
+
+const txn = (over: Partial<Transaction>): Transaction => ({
+  txn_id: 'TXN-0000000', txn_time: '2026-09-29 14:16:08', account_id: 'ACC-000300', direction: 'DR', amount_myr: 10,
+  channel: 'Card POS', merchant_or_counterparty: 'Shop', counterparty_bank: '', card_last4: '4821', status: 'Completed',
+  description: '', reportable: true, ...over,
+});
+
+/** GET /me/transactions, newest first: a card charge, a transfer in, a failed online charge, and an old ATM withdrawal. */
+export const STATEMENT: Statement = {
+  as_of: '2026-09-30 18:00',
+  report_window_days: 45,
+  transactions: [
+    txn({ txn_id: 'TXN-0000101', txn_time: '2026-09-29 14:16:08', merchant_or_counterparty: 'FoodKu', amount_myr: 12.45,
+      channel: 'Card e-Commerce' }),
+    txn({ txn_id: 'TXN-0000102', txn_time: '2026-09-20 10:19:17', direction: 'CR', amount_myr: 250,
+      channel: 'DuitNow Received', merchant_or_counterparty: 'Siti Aminah', card_last4: '' }),
+    txn({ txn_id: 'TXN-0000103', txn_time: '2026-08-30 20:17:33', account_id: 'ACC-000301', amount_myr: 101.43,
+      channel: 'Card e-Commerce', merchant_or_counterparty: 'ShopLah Online', card_last4: '1907', status: 'Failed' }),
+    txn({ txn_id: 'TXN-0000104', txn_time: '2026-07-02 19:30:02', amount_myr: 200, channel: 'ATM Withdrawal',
+      merchant_or_counterparty: 'Shah Alam Branch', description: 'ATM-SHA-01', reportable: false }),
+  ],
+};
 
 export function installFakeApi(cases: CaseDetail[] = seedCases()) {
   const tokens = new Map<string, string>();
@@ -103,6 +136,11 @@ export function installFakeApi(cases: CaseDetail[] = seedCases()) {
     }
     if (!who) return fail(401, { code: 'INVALID_TOKEN', message: 'Your session is not valid. Please log in again.' });
     if (path === '/auth/me') return json(200, { username: who.username, role: who.role, full_name: who.full_name, approval_limit_myr: null });
+
+    if (path === '/me/profile' || path === '/me/transactions') {
+      if (who.role !== 'customer') return fail(403, { code: 'FORBIDDEN', message: `Your role (${who.role}) cannot do this.` });
+      return json(200, path === '/me/profile' ? profileOf(who.username, who.full_name) : STATEMENT);
+    }
 
     if (path === '/cases' && method === 'GET') {
       const statuses = url.searchParams.get('status')?.split(',') as CaseStatus[] | undefined;

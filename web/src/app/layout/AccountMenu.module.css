@@ -1,0 +1,134 @@
+.trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 52px;
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.trigger:hover {
+  background: var(--primary-tint);
+  border-color: var(--border-strong);
+}
+
+.trigger:active {
+  background: var(--primary-tint);
+}
+
+.trigger:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.trigger[data-state='open'] {
+  background: var(--primary-tint);
+  border-color: var(--primary-border);
+}
+
+.who {
+  display: grid;
+  flex: 1;
+  min-width: 0;                       /* lets a long name truncate instead of pushing the chevron out */
+}
+
+.name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.role {
+  color: var(--text-2);
+  font-size: var(--text-sm);
+}
+
+.chevron {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  color: var(--text-2);
+}
+
+/* The panel matches the trigger's width (Radix measures it), and is never narrower than its longest item */
+.menu {
+  width: max(240px, var(--radix-popover-trigger-width));
+  padding: var(--space-2);
+}
+
+.header {
+  padding: var(--space-2) var(--space-2) var(--space-3);
+}
+
+.headerName {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.headerSub {
+  color: var(--text-2);
+  font-size: var(--text-sm);
+}
+
+.group {
+  padding-top: var(--space-2);
+  margin-top: var(--space-1);
+  border-top: 1px solid var(--border);
+}
+
+.group ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: 36px;
+  padding: 0 var(--space-2);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius);
+  color: var(--text);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.item svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  color: var(--text-2);
+}
+
+.item:hover {
+  background: var(--primary-tint);
+}
+
+.item:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.active {
+  background: var(--primary-tint);
+  font-weight: 600;
+}
+
+.active svg {
+  color: var(--primary-ink);
+}
+
+.theme {
+  padding: var(--space-2) var(--space-2) var(--space-1);
+}

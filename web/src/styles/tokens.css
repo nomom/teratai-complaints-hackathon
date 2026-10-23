@@ -110,6 +110,7 @@
   --radius: 8px;
   --radius-card: 12px;
   --font: 'Inter', 'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Code', 'SF Mono', Consolas, monospace;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
